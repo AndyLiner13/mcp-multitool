@@ -4,11 +4,23 @@
 [![npm downloads](https://img.shields.io/npm/dm/mcp-multitool)](https://www.npmjs.com/package/mcp-multitool)
 [![license](https://img.shields.io/npm/l/mcp-multitool)](./LICENSE)
 
-A minimal [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server with utility tools.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server with **file operations**, **log compression**, and **timing utilities**.
+
+## Tools
+
+| Tool                  | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| `deleteFile`          | Delete files or directories (single or batch)   |
+| `moveFile`            | Move/rename files or directories                |
+| `compressLogs`        | Compress log arrays with 60-90% token reduction |
+| `compressText`        | Compress multi-line log text                    |
+| `analyzePatterns`     | Quick pattern extraction from logs              |
+| `estimateCompression` | Estimate compression ratio before processing    |
+| `wait`                | Pause execution for rate limits or timing       |
 
 ## Why
 
-Some tasks need simple utilities that don't warrant a larger server — pausing for rate limits, deleting temp files, etc. `mcp-multitool` gives any MCP-compatible client a small set of reliable tools.
+Some tasks need simple utilities that don't warrant a larger server — cleaning up temp files, compressing verbose logs before analysis, pausing for rate limits. `mcp-multitool` gives any MCP-compatible client a small set of reliable tools.
 
 ## Quick Start
 

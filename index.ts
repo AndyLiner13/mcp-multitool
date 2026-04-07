@@ -11,7 +11,7 @@ import { register as registerWait } from "./tools/wait.js";
 
 const isEnabled = (name: string): boolean => process.env[name] !== "false";
 
-const server = new McpServer({ name: "mcp-multitool", version: "0.1.0" });
+const server = new McpServer({ name: "mcp-multitool" });
 
 if (isEnabled("analyzePatterns")) registerAnalyzePatterns(server);
 if (isEnabled("compressLogs")) registerCompressLogs(server);
