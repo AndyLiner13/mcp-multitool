@@ -1,6 +1,6 @@
 {
   "name": "mcp-multitool",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCP server with file operations (delete, move), log compression (60-90% token reduction), and timing utilities.",
   "license": "MIT",
   "type": "module",
