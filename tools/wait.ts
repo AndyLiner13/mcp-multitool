@@ -1,16 +1,16 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-const DEFAULT_MAX_MS = 300_000;
-const maxMs = parseMaxDuration();
+const DEFAULT_MAX_SECONDS = 300;
+const maxSeconds = parseMaxDuration();
 
 function parseMaxDuration(): number {
-  const env = process.env.waitMaxDurationMs;
-  if (!env) return DEFAULT_MAX_MS;
+  const env = process.env.waitMaxDurationSeconds;
+  if (!env) return DEFAULT_MAX_SECONDS;
   const parsed = Number(env);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     process.stderr.write(
-      `Invalid waitMaxDurationMs: "${env}". Must be a positive number.\n`,
+      `Invalid waitMaxDurationSeconds: "${env}". Must be a positive number.\n`,
     );
     process.exit(1);
   }
@@ -18,12 +18,12 @@ function parseMaxDuration(): number {
 }
 
 const schema = z.object({
-  durationMs: z
+  durationSeconds: z
     .number()
     .int()
     .min(1)
-    .max(maxMs)
-    .describe(`Milliseconds to wait. Min: 1, max: ${maxMs}.`),
+    .max(maxSeconds)
+    .describe(`Seconds to wait. Min: 1, max: ${maxSeconds}.`),
   reason: z
     .string()
     .min(1)
@@ -40,10 +40,11 @@ export function register(server: McpServer): void {
     },
     async (input) => {
       try {
-        await new Promise((r) => setTimeout(r, input.durationMs));
+        const ms = Math.round(input.durationSeconds * 1000);
+        await new Promise((r) => setTimeout(r, ms));
         return {
           content: [
-            { type: "text", text: `${input.durationMs}ms have passed.` },
+            { type: "text", text: `${input.durationSeconds}s have passed.` },
           ],
         };
       } catch (err: unknown) {

@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/mcp-multitool)](https://www.npmjs.com/package/mcp-multitool)
 [![license](https://img.shields.io/npm/l/mcp-multitool)](./LICENSE)
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server with **file operations** and **timing utilities**.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server with basic **file operations** and **timing utilities**.
 
 ## Tools
 
@@ -105,29 +105,29 @@ moveFile  from="config.json"  to="dest/"  overwrite=true
 
 Wait for a specified duration before continuing.
 
-| Parameter    | Type      | Required | Description                                                                                       |
-| ------------ | --------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `durationMs` | `integer` | ✅       | How long to wait in milliseconds. Must be ≥ 1 and ≤ the configured max (default: 300000 / 5 min). |
-| `reason`     | `string`  | ✅       | Why the wait is needed. Max 64 characters.                                                        |
+| Parameter         | Type      | Required | Description                                                                               |
+| ----------------- | --------- | -------- | ----------------------------------------------------------------------------------------- |
+| `durationSeconds` | `integer` | ✅       | How long to wait in seconds. Must be ≥ 1 and ≤ the configured max (default: 300 / 5 min). |
+| `reason`          | `string`  | ✅       | Why the wait is needed. Max 64 characters.                                                |
 
-**Response:** `"Nms have passed."`
+**Response:** `"Ns have passed."`
 
 **Examples:**
 
 ```
-wait  durationMs=2000  reason="settling after write"
-wait  durationMs=5000  reason="rate limit cooldown"
-wait  durationMs=500   reason="animation to complete"
+wait  durationSeconds=2  reason="settling after write"
+wait  durationSeconds=5  reason="rate limit cooldown"
+wait  durationSeconds=1  reason="animation to complete"
 ```
 
 ## Environment Variables
 
-| Variable            | Default  | Description                                                                                               |
-| ------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `waitMaxDurationMs` | `300000` | Override the maximum allowed `durationMs`. Must be a positive number. Server refuses to start if invalid. |
-| `deleteFile`        | _(on)_   | Set to `"false"` to disable the `deleteFile` tool at startup.                                             |
-| `moveFile`          | _(on)_   | Set to `"false"` to disable the `moveFile` tool at startup.                                               |
-| `wait`              | _(on)_   | Set to `"false"` to disable the `wait` tool at startup.                                                   |
+| Variable                 | Default | Description                                                                                                    |
+| ------------------------ | ------- | -------------------------------------------------------------------------------------------------------------- |
+| `waitMaxDurationSeconds` | `300`   | Override the maximum allowed `durationSeconds`. Must be a positive number. Server refuses to start if invalid. |
+| `deleteFile`             | _(on)_  | Set to `"false"` to disable the `deleteFile` tool at startup.                                                  |
+| `moveFile`               | _(on)_  | Set to `"false"` to disable the `moveFile` tool at startup.                                                    |
+| `wait`                   | _(on)_  | Set to `"false"` to disable the `wait` tool at startup.                                                        |
 
 ### Disabling Individual Tools
 
