@@ -11,7 +11,7 @@ import { register as registerMoveFile } from "./tools/moveFile.js";
 import { register as registerWait } from "./tools/wait.js";
 
 const require = createRequire(import.meta.url);
-const { version } = require("./package.json") as { version: string };
+const { version } = require("../package.json") as { version: string };
 
 const isEnabled = (name: string): boolean => process.env[name] !== "false";
 
