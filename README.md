@@ -71,6 +71,28 @@ deleteFile  paths="build/"  recursive=true
 
 ---
 
+### `moveFile`
+
+Move one or more files or directories to a destination directory.
+
+| Parameter   | Type                 | Required | Default | Description                        |
+| ----------- | -------------------- | -------- | ------- | ---------------------------------- |
+| `from`      | `string \| string[]` | ✅       | —       | Source path(s) to move.            |
+| `to`        | `string`             | ✅       | —       | Destination directory.             |
+| `overwrite` | `boolean`            | —        | `false` | If true, overwrite existing files. |
+
+**Response:** `"Moved N path(s)."`
+
+**Examples:**
+
+```
+moveFile  from="old.txt"  to="archive/"
+moveFile  from=["a.txt", "b.txt"]  to="backup/"
+moveFile  from="config.json"  to="dest/"  overwrite=true
+```
+
+---
+
 ### `wait`
 
 Wait for a specified duration before continuing.
@@ -96,6 +118,7 @@ wait  durationMs=500   reason="animation to complete"
 | ------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
 | `waitMaxDurationMs` | `300000` | Override the maximum allowed `durationMs`. Must be a positive number. Server refuses to start if invalid. |
 | `deleteFile`        | _(on)_   | Set to `"false"` to disable the `deleteFile` tool at startup.                                             |
+| `moveFile`          | _(on)_   | Set to `"false"` to disable the `moveFile` tool at startup.                                               |
 | `wait`              | _(on)_   | Set to `"false"` to disable the `wait` tool at startup.                                                   |
 
 ### Disabling Individual Tools

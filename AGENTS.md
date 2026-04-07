@@ -79,7 +79,23 @@ mcp-multitool/
 2. **Define a zod schema** for the input
 3. **Export a `register(server: McpServer): void` function** that calls `server.registerTool(...)`
 4. **Add `if (isEnabled("{toolName}")) register{ToolName}(server);`** in `index.ts`
-5. **Document the tool** in the Tool Reference section of `README.md`, including its env disable key
+5. **Build** — run `npm run build` and verify there are no errors
+6. **Test** — invoke the tool via MCP to verify it works end-to-end (a feature is **not complete** until tested)
+7. **Ask the user** — use the `vscode_askQuestions` tool to ask: _"Should I update the README now, or are there more changes first?"_
+8. **Update README.md** — add the tool to the Tool Reference section (alphabetically) and add its env disable key to the Environment Variables table
+
+### Build and Test Are Mandatory
+
+A feature is **not complete** until:
+
+1. `npm run build` succeeds with no errors
+2. The tool has been invoked via MCP and the expected behavior verified
+
+Do not skip testing. Do not mark a task as done until you have confirmed the tool works.
+
+### README Updates Are Mandatory
+
+Every tool change — new tool, parameter change, behavior change — **must** be reflected in `README.md`. Before updating the README, always use `vscode_askQuestions` to confirm with the user whether to proceed or batch more changes first.
 
 ### Minimal tool template
 
