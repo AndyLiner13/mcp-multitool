@@ -32,10 +32,12 @@ const schema = z.object({
 });
 
 export function register(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "wait",
-    "Wait for a specified duration before continuing.",
-    schema.shape,
+    {
+      description: "Wait for a specified duration before continuing.",
+      inputSchema: schema,
+    },
     async (input) => {
       try {
         await new Promise((r) => setTimeout(r, input.durationMs));

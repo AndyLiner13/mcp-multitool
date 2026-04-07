@@ -77,7 +77,7 @@ mcp-multitool/
 
 1. **Create `tools/{toolName}.ts`** — camelCase, matching the action performed
 2. **Define a zod schema** for the input
-3. **Export a `register(server: McpServer): void` function** that calls `server.tool(...)`
+3. **Export a `register(server: McpServer): void` function** that calls `server.registerTool(...)`
 4. **Add `if (isEnabled("{toolName}")) register{ToolName}(server);`** in `index.ts`
 5. **Document the tool** in the Tool Reference section of `README.md`, including its env disable key
 
@@ -92,10 +92,12 @@ const schema = z.object({
 });
 
 export function register(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "toolName",
-    "Description for the LLM.",
-    schema.shape,
+    {
+      description: "Description for the LLM.",
+      inputSchema: schema,
+    },
     async (input) => {
       try {
         // implementation
