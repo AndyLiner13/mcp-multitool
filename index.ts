@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { register as registerAnalyzePatterns } from "./tools/analyzePatterns.js";
@@ -9,9 +10,12 @@ import { register as registerEstimateCompression } from "./tools/estimateCompres
 import { register as registerMoveFile } from "./tools/moveFile.js";
 import { register as registerWait } from "./tools/wait.js";
 
+const require = createRequire(import.meta.url);
+const { version } = require("./package.json") as { version: string };
+
 const isEnabled = (name: string): boolean => process.env[name] !== "false";
 
-const server = new McpServer({ name: "mcp-multitool" });
+const server = new McpServer({ name: "mcp-multitool", version });
 
 if (isEnabled("analyzePatterns")) registerAnalyzePatterns(server);
 if (isEnabled("compressLogs")) registerCompressLogs(server);
