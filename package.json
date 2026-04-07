@@ -1,7 +1,7 @@
 {
   "name": "mcp-multitool",
   "version": "0.1.5",
-  "description": "MCP server with file operations (delete, move), log compression (60-90% token reduction), and timing utilities.",
+  "description": "MCP server with file operations (delete, move) and timing utilities.",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -14,12 +14,10 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
-    "log-compression",
     "file-operations",
     "delete-file",
     "move-file",
     "wait",
-    "logpare",
     "tool"
   ],
   "scripts": {
@@ -32,7 +30,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
-    "logpare": "^0.1.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
