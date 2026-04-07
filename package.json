@@ -18,16 +18,25 @@
     "tool"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && vite build",
+    "build:server": "tsc",
+    "build:app": "vite build",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.5.0",
     "@modelcontextprotocol/sdk": "1.29.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3",
+    "vite": "^8.0.5",
+    "vite-plugin-singlefile": "^2.3.2"
   },
   "engines": {
     "node": ">=20"
