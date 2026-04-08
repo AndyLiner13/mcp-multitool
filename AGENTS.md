@@ -38,6 +38,8 @@ Write for LLMs, not protocol developers. The description must help the model kno
 - Use `zod` to define all schemas
 - Every parameter gets a `.describe()` with a concise description
 - Validation constraints (`.min()`, `.max()`, `.int()`) must match documented behaviour
+- **Never use `.refine()`, `.transform()`, `.superRefine()`, or `.pipe()` on tool input schemas.** These wrap the schema in `ZodEffects`, which hides `.shape` from the MCP SDK's `normalizeObjectSchema`. The result: `"properties": {}` in the tool listing — agents can't see any parameters. Move cross-field validation into the tool handler instead.
+- **Never use `.default()` on parameters.** It removes the field from the JSON Schema `required` array, making it invisible as a required parameter to agents. Every field should be explicitly required or `.optional()`.
 
 ### Annotations
 

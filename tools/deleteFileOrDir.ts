@@ -13,7 +13,7 @@ const schema = z.object({
 
 export function register(server: McpServer): void {
   server.registerTool(
-    "deleteFile",
+    "deleteFileOrDir",
     {
       description: "Delete one or more files or directories.",
       inputSchema: schema,

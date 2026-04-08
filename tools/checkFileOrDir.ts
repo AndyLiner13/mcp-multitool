@@ -9,10 +9,10 @@ const schema = z.object({
 
 export function register(server: McpServer): void {
   server.registerTool(
-    "checkFile",
+    "checkFileOrDir",
     {
       description:
-        "Check if a file or folder exists and return its metadata (type, size, timestamps, permissions). Returns an error if the path does not exist.",
+        "Check if a file or directory exists and return its metadata (type, size, timestamps, permissions). Returns an error if the path does not exist.",
       inputSchema: schema,
       annotations: {
         readOnlyHint: true,

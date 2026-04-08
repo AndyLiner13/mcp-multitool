@@ -5,11 +5,11 @@ import { z } from "zod";
 import { createDrain, type Drain, type OutputFormat } from "logpare";
 
 const timeoutMs = (() => {
-  const env = process.env.readLogTimeoutMs;
+  const env = process.env.readLogFileTimeoutMs;
   if (!env) return 5000;
   const n = Number(env);
   if (!Number.isFinite(n) || n <= 0) {
-    process.stderr.write(`Invalid readLogTimeoutMs: "${env}".\n`);
+    process.stderr.write(`Invalid readLogFileTimeoutMs: "${env}".\n`);
     process.exit(1);
   }
   return n;
@@ -25,33 +25,29 @@ interface DrainState {
 const drains = new Map<string, DrainState>();
 let flushTool: { remove: () => void } | null = null;
 
-const schema = z
-  .object({
-    path: z.string().min(1).describe("Path to the log file."),
-    format: z.enum(["summary", "detailed", "json"]).describe("Output format."),
-    depth: z.number().int().min(2).max(8).describe("Parse tree depth (2-8)."),
-    simThreshold: z
-      .number()
-      .min(0)
-      .max(1)
-      .describe("Similarity threshold (0-1)."),
-    tail: z
-      .number()
-      .int()
-      .min(1)
-      .optional()
-      .describe("Last N lines (first read only)."),
-    head: z
-      .number()
-      .int()
-      .min(1)
-      .optional()
-      .describe("First N lines (first read only)."),
-    grep: z.string().optional().describe("Regex filter for lines."),
-  })
-  .refine((d) => !(d.head && d.tail), {
-    message: "Cannot use both head and tail.",
-  });
+const schema = z.object({
+  path: z.string().min(1).describe("Path to the log file."),
+  format: z.enum(["summary", "detailed", "json"]).describe("Output format."),
+  depth: z.number().int().min(2).max(8).describe("Parse tree depth (2-8)."),
+  simThreshold: z
+    .number()
+    .min(0)
+    .max(1)
+    .describe("Similarity threshold (0-1)."),
+  tail: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("Last N lines (first read only)."),
+  head: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("First N lines (first read only)."),
+  grep: z.string().optional().describe("Regex filter for lines."),
+});
 
 const flushSchema = z.object({
   path: z.string().min(1).describe("Path to the log file to flush."),
@@ -65,10 +61,10 @@ const err = (text: string) => ({
 
 export function register(server: McpServer): void {
   server.registerTool(
-    "readLog",
+    "readLogFile",
     {
       description:
-        "Compress a log file using semantic pattern extraction (60-90% reduction). Creates stateful drains for incremental reads. Use flushLog to release.",
+        "Compress a log file using semantic pattern extraction (60-90% reduction). Creates stateful drains for incremental reads. Use flushLogFile to release.",
       inputSchema: schema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -88,6 +84,10 @@ async function processLog(
 ): Promise<string> {
   const path = resolve(process.cwd(), input.path);
   let state = drains.get(path);
+
+  if (input.head && input.tail) {
+    return "Cannot use both head and tail.";
+  }
 
   if (
     state &&
@@ -121,7 +121,7 @@ async function processLog(
     drains.set(path, state);
 
     if (wasEmpty) registerFlush(server);
-    return `${state.drain.getResult(input.format as OutputFormat).formatted}\n\n[New drain. ${state.lastLine} lines. Use flushLog when done.]`;
+    return `${state.drain.getResult(input.format as OutputFormat).formatted}\n\n[New drain. ${state.lastLine} lines. Use flushLogFile when done.]`;
   }
 
   const newLines = lines.slice(state.lastLine);
@@ -143,10 +143,10 @@ function registerFlush(server: McpServer): void {
   if (flushTool) return;
   try {
     flushTool = server.registerTool(
-      "flushLog",
+      "flushLogFile",
       {
         description:
-          "Release a log drain to free memory. Next readLog creates fresh drain.",
+          "Release a log drain to free memory. Next readLogFile creates fresh drain.",
         inputSchema: flushSchema,
         annotations: { destructiveHint: true, idempotentHint: true },
       },

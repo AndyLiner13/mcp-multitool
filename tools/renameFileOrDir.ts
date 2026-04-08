@@ -3,24 +3,20 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { rename, stat } from "node:fs/promises";
 import { dirname, basename } from "node:path";
 
-const schema = z
-  .object({
-    oldPath: z.string().min(1).describe("Current path to the file or folder."),
-    newPath: z
-      .string()
-      .min(1)
-      .describe("New path with the renamed file or folder."),
-  })
-  .refine((d) => dirname(d.oldPath) === dirname(d.newPath), {
-    message: "Parent directory must match. Use moveFile to change directories.",
-  });
+const schema = z.object({
+  oldPath: z.string().min(1).describe("Current path to the file or directory."),
+  newPath: z
+    .string()
+    .min(1)
+    .describe("New path with the renamed file or directory."),
+});
 
 export function register(server: McpServer): void {
   server.registerTool(
-    "renameFile",
+    "renameFileOrDir",
     {
       description:
-        "Rename a single file or folder. Only the name can change — the parent directory must stay the same. Use moveFile to change directories.",
+        "Rename a single file or directory. Only the name can change — the parent directory must stay the same. Use moveFileOrDir to change directories.",
       inputSchema: schema,
       annotations: {
         destructiveHint: true,
@@ -30,6 +26,18 @@ export function register(server: McpServer): void {
     },
     async (input) => {
       try {
+        if (dirname(input.oldPath) !== dirname(input.newPath)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Parent directory must match. Use moveFileOrDir to change directories.",
+              },
+            ],
+          };
+        }
+
         const oldName = basename(input.oldPath);
         const newName = basename(input.newPath);
 

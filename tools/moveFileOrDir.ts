@@ -22,7 +22,7 @@ async function exists(path: string): Promise<boolean> {
 
 export function register(server: McpServer): void {
   server.registerTool(
-    "moveFile",
+    "moveFileOrDir",
     {
       description:
         "Move one or more files or directories to a destination directory.",
