@@ -104,17 +104,19 @@ moveFile  from="config.json"  to="dest/"  overwrite=true
 
 ### `readLog`
 
-Read and compress a log file using semantic pattern extraction. Returns a compressed summary with 60-90% token reduction, ideal for analyzing logs without loading raw content into context.
+Compress a log file using semantic pattern extraction (60-90% token reduction). Creates stateful drains for incremental reads. Use `flushLog` to release.
 
-| Parameter      | Type      | Required | Description                                                           |
-| -------------- | --------- | -------- | --------------------------------------------------------------------- |
-| `path`         | `string`  | ✅       | Path to the log file (absolute or relative to cwd).                   |
-| `format`       | `string`  | ✅       | Output format: `summary`, `detailed`, or `json`.                      |
-| `depth`        | `integer` | ✅       | Parse tree depth for pattern matching (2-8). Higher = more specific.  |
-| `simThreshold` | `number`  | ✅       | Similarity threshold for grouping (0.0-1.0). Lower = more aggressive. |
-| `tail`         | `integer` | —        | Only read the last N lines of the file.                               |
-| `head`         | `integer` | —        | Only read the first N lines of the file.                              |
-| `grep`         | `string`  | —        | Filter lines matching this regex before compression.                  |
+**Stateful drains:** On first call for a file, creates a stateful drain. Subsequent calls append only new lines to the existing drain, preserving template IDs. This enables incremental log analysis as files grow. When any drain is active, a dynamic `flushLog` tool appears to release drains.
+
+| Parameter      | Type      | Required | Description                                      |
+| -------------- | --------- | -------- | ------------------------------------------------ |
+| `path`         | `string`  | ✅       | Path to the log file.                            |
+| `format`       | `string`  | ✅       | Output format: `summary`, `detailed`, or `json`. |
+| `depth`        | `integer` | ✅       | Parse tree depth (2-8).                          |
+| `simThreshold` | `number`  | ✅       | Similarity threshold (0-1).                      |
+| `tail`         | `integer` | —        | Last N lines (first read only).                  |
+| `head`         | `integer` | —        | First N lines (first read only).                 |
+| `grep`         | `string`  | —        | Regex filter for lines.                          |
 
 **Response:** Compressed log summary showing unique templates and occurrence counts.
 
@@ -124,6 +126,24 @@ Read and compress a log file using semantic pattern extraction. Returns a compre
 readLog  path="/var/log/app.log"  format="summary"  depth=4  simThreshold=0.4
 readLog  path="./logs/server.log"  format="detailed"  depth=4  simThreshold=0.4  tail=1000
 readLog  path="app.log"  format="json"  depth=6  simThreshold=0.3  grep="ERROR|WARN"
+```
+
+---
+
+### `flushLog` (dynamic)
+
+Release a log drain to free memory. Next `readLog` creates fresh drain. **This tool only appears when at least one drain is active.** When the last drain is flushed, the tool is automatically removed.
+
+| Parameter | Type     | Required | Description                    |
+| --------- | -------- | -------- | ------------------------------ |
+| `path`    | `string` | ✅       | Path to the log file to flush. |
+
+**Response:** `"Flushed {filename}. Released N templates from M lines."`
+
+**Example:**
+
+```
+flushLog  path="/var/log/app.log"
 ```
 
 ---
