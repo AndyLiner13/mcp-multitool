@@ -148,7 +148,7 @@ function registerFlush(server: McpServer): void {
         description:
           "Release a log drain to free memory. Next readLogFile creates fresh drain.",
         inputSchema: flushSchema,
-        annotations: { destructiveHint: true, idempotentHint: true },
+        annotations: { destructiveHint: false, idempotentHint: true },
       },
       async (input) => {
         try {
