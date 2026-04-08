@@ -95,6 +95,41 @@ A feature is **not complete** until:
 
 Do not skip testing. Do not mark a task as done until you have confirmed the tool works.
 
+### Testing Workflow
+
+Testing means **calling the tool via MCP**. Terminal workarounds (`node -e`, direct function calls, etc.) do not count as testing. Follow this exact workflow:
+
+1. **Invoke the tool via MCP.** Use the actual MCP tool (e.g., `mcp_mcp-multitool_toolName`). Pass realistic parameters and verify the response.
+
+2. **If the tool is unavailable:**
+   - Use `vscode_askQuestions` to ask the user to restart the MCP server.
+   - Wait for the user to confirm the restart.
+   - Try invoking the tool again.
+
+3. **If the tool is still unavailable after restart:**
+   - Do NOT assume the user wants you to troubleshoot.
+   - Use `vscode_askQuestions` to ask: "The tool is still unavailable. Should I troubleshoot the issue?"
+   - Only proceed with troubleshooting if the user explicitly approves.
+
+4. **Validate the response.** Check that the response:
+   - Is not an error (unless testing error handling)
+   - Has the expected structure and content
+   - Matches the tool's documented behavior
+
+5. **Never end the request prematurely.** The request is not complete until ALL of the following are true:
+   - The tool has been invoked via MCP
+   - The response has been received and validated
+   - The user has approved each subsequent step (README update, etc.)
+   - The README has been updated (if applicable)
+
+**Anti-patterns — Never do these:**
+
+- ❌ Using `node -e` or terminal commands as a substitute for MCP testing
+- ❌ Marking a tool as "tested" without actually calling it via MCP
+- ❌ Ending the request because the tool is unavailable without asking the user
+- ❌ Assuming the user wants troubleshooting without asking
+- ❌ Skipping README updates or batching them without user approval
+
 ### README Updates Are Mandatory
 
 Every tool change — new tool, parameter change, behavior change — **must** be reflected in `README.md`. Before updating the README, always use `vscode_askQuestions` to confirm with the user whether to proceed or batch more changes first.

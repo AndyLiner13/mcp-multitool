@@ -12,6 +12,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server with **
 | ----------------- | ------------------------------------------------------- |
 | `astGrepSearch`   | Search code using AST patterns                          |
 | `checkFileOrDir`  | Check if a file or directory exists and return metadata |
+| `cloneFileOrDir`  | Copy one or more files or directories to a destination  |
 | `deleteFileOrDir` | Delete one or more files or directories                 |
 | `moveFileOrDir`   | Move one or more files or directories to a new location |
 | `readLogFile`     | Read and compress logs with 60-90% token reduction      |
@@ -100,6 +101,28 @@ Check if a file or directory exists and return its metadata (type, size, timesta
 checkFileOrDir  path="config.json"
 checkFileOrDir  path="/var/log/"
 checkFileOrDir  path="./src/index.ts"
+```
+
+---
+
+### `cloneFileOrDir`
+
+Copy one or more files or directories to a destination directory.
+
+| Parameter   | Type                 | Required | Description                        |
+| ----------- | -------------------- | -------- | ---------------------------------- |
+| `from`      | `string \| string[]` | ✅       | Source path(s) to clone.           |
+| `to`        | `string`             | ✅       | Destination directory.             |
+| `overwrite` | `boolean`            | ✅       | If true, overwrite existing files. |
+
+**Response:** JSON array of `{source, destination}` objects showing each cloned path.
+
+**Examples:**
+
+```
+cloneFileOrDir  from="config.json"  to="backup/"  overwrite=false
+cloneFileOrDir  from=["a.txt", "b.txt"]  to="copies/"  overwrite=false
+cloneFileOrDir  from="src/"  to="archive/"  overwrite=true
 ```
 
 ---
@@ -240,6 +263,7 @@ wait  durationSeconds=1  reason="animation to complete"
 | `readLogFileTimeoutMs`   | `5000`  | Override the timeout for `readLogFile` processing in milliseconds. Server refuses to start if invalid.         |
 | `astGrepSearch`          | _(on)_  | Set to `"false"` to disable the `astGrepSearch` tool at startup.                                               |
 | `checkFileOrDir`         | _(on)_  | Set to `"false"` to disable the `checkFileOrDir` tool at startup.                                              |
+| `cloneFileOrDir`         | _(on)_  | Set to `"false"` to disable the `cloneFileOrDir` tool at startup.                                              |
 | `deleteFileOrDir`        | _(on)_  | Set to `"false"` to disable the `deleteFileOrDir` tool at startup.                                             |
 | `moveFileOrDir`          | _(on)_  | Set to `"false"` to disable the `moveFileOrDir` tool at startup.                                               |
 | `readLogFile`            | _(on)_  | Set to `"false"` to disable the `readLogFile` tool at startup.                                                 |
