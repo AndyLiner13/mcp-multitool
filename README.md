@@ -11,8 +11,9 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server with **
 | Tool         | Description                                        |
 | ------------ | -------------------------------------------------- |
 | `deleteFile` | Delete files or directories (single or batch)      |
-| `moveFile`   | Move/rename files or directories                   |
+| `moveFile`   | Move files or directories to a new location        |
 | `readLog`    | Read and compress logs with 60-90% token reduction |
+| `renameFile` | Rename a single file or folder                     |
 | `wait`       | Pause execution for rate limits or timing          |
 
 ## Why
@@ -148,6 +149,26 @@ flushLog  path="/var/log/app.log"
 
 ---
 
+### `renameFile`
+
+Rename a single file or folder. Only the name can change — the parent directory must stay the same. Use `moveFile` to change directories.
+
+| Parameter | Type     | Required | Description                               |
+| --------- | -------- | -------- | ----------------------------------------- |
+| `oldPath` | `string` | ✅       | Current path to the file or folder.       |
+| `newPath` | `string` | ✅       | New path with the renamed file or folder. |
+
+**Response:** `"Renamed "{oldName}" to "{newName}"."`
+
+**Examples:**
+
+```
+renameFile  oldPath="config.json"  newPath="config.backup.json"
+renameFile  oldPath="/app/src"  newPath="/app/source"
+```
+
+---
+
 ### `wait`
 
 Wait for a specified duration before continuing.
@@ -176,6 +197,7 @@ wait  durationSeconds=1  reason="animation to complete"
 | `deleteFile`             | _(on)_  | Set to `"false"` to disable the `deleteFile` tool at startup.                                                  |
 | `moveFile`               | _(on)_  | Set to `"false"` to disable the `moveFile` tool at startup.                                                    |
 | `readLog`                | _(on)_  | Set to `"false"` to disable the `readLog` tool at startup.                                                     |
+| `renameFile`             | _(on)_  | Set to `"false"` to disable the `renameFile` tool at startup.                                                  |
 | `wait`                   | _(on)_  | Set to `"false"` to disable the `wait` tool at startup.                                                        |
 
 ### Disabling Individual Tools
