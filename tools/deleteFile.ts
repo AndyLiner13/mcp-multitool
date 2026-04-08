@@ -18,6 +18,10 @@ export function register(server: McpServer): void {
     {
       description: "Delete one or more files or directories.",
       inputSchema: schema,
+      annotations: {
+        destructiveHint: true,
+        openWorldHint: false,
+      },
     },
     async (input) => {
       try {

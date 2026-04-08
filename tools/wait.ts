@@ -37,6 +37,10 @@ export function register(server: McpServer): void {
     {
       description: "Wait for a specified duration before continuing.",
       inputSchema: schema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+      },
     },
     async (input) => {
       try {

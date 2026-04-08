@@ -30,6 +30,10 @@ export function register(server: McpServer): void {
       description:
         "Move one or more files or directories to a destination directory.",
       inputSchema: schema,
+      annotations: {
+        destructiveHint: true,
+        openWorldHint: false,
+      },
     },
     async (input) => {
       try {
