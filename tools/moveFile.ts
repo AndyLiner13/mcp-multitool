@@ -8,10 +8,7 @@ const schema = z.object({
     .union([z.string(), z.array(z.string())])
     .describe("Source path(s) to move."),
   to: z.string().describe("Destination directory."),
-  overwrite: z
-    .boolean()
-    .default(false)
-    .describe("If true, overwrite existing files."),
+  overwrite: z.boolean().describe("If true, overwrite existing files."),
 });
 
 async function exists(path: string): Promise<boolean> {

@@ -85,18 +85,18 @@ checkFile  path="./src/index.ts"
 
 Delete one or more files or directories.
 
-| Parameter   | Type                 | Required | Default | Description                                           |
-| ----------- | -------------------- | -------- | ------- | ----------------------------------------------------- |
-| `paths`     | `string \| string[]` | ✅       | —       | File or directory path(s) to delete.                  |
-| `recursive` | `boolean`            | —        | `false` | If true, delete directories and contents recursively. |
+| Parameter   | Type                 | Required | Description                                           |
+| ----------- | -------------------- | -------- | ----------------------------------------------------- |
+| `paths`     | `string \| string[]` | ✅       | File or directory path(s) to delete.                  |
+| `recursive` | `boolean`            | ✅       | If true, delete directories and contents recursively. |
 
 **Response:** `"Deleted N path(s)."`
 
 **Examples:**
 
 ```
-deleteFile  paths="temp.txt"
-deleteFile  paths=["a.txt", "b.txt"]
+deleteFile  paths="temp.txt"  recursive=false
+deleteFile  paths=["a.txt", "b.txt"]  recursive=false
 deleteFile  paths="build/"  recursive=true
 ```
 
@@ -106,19 +106,19 @@ deleteFile  paths="build/"  recursive=true
 
 Move one or more files or directories to a destination directory.
 
-| Parameter   | Type                 | Required | Default | Description                        |
-| ----------- | -------------------- | -------- | ------- | ---------------------------------- |
-| `from`      | `string \| string[]` | ✅       | —       | Source path(s) to move.            |
-| `to`        | `string`             | ✅       | —       | Destination directory.             |
-| `overwrite` | `boolean`            | —        | `false` | If true, overwrite existing files. |
+| Parameter   | Type                 | Required | Description                        |
+| ----------- | -------------------- | -------- | ---------------------------------- |
+| `from`      | `string \| string[]` | ✅       | Source path(s) to move.            |
+| `to`        | `string`             | ✅       | Destination directory.             |
+| `overwrite` | `boolean`            | ✅       | If true, overwrite existing files. |
 
 **Response:** `"Moved N path(s)."`
 
 **Examples:**
 
 ```
-moveFile  from="old.txt"  to="archive/"
-moveFile  from=["a.txt", "b.txt"]  to="backup/"
+moveFile  from="old.txt"  to="archive/"  overwrite=false
+moveFile  from=["a.txt", "b.txt"]  to="backup/"  overwrite=false
 moveFile  from="config.json"  to="dest/"  overwrite=true
 ```
 

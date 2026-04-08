@@ -8,7 +8,6 @@ const schema = z.object({
     .describe("File or directory path(s) to delete."),
   recursive: z
     .boolean()
-    .default(false)
     .describe("If true, delete directories and contents recursively."),
 });
 
