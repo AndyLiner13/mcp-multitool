@@ -2,6 +2,7 @@
 import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { register as registerAstGrepSearch } from "./tools/astGrepSearch.js";
 import { register as registerCheckFileOrDir } from "./tools/checkFileOrDir.js";
 import { register as registerDeleteFileOrDir } from "./tools/deleteFileOrDir.js";
 import { register as registerMoveFileOrDir } from "./tools/moveFileOrDir.js";
@@ -16,6 +17,7 @@ const isEnabled = (name: string): boolean => process.env[name] !== "false";
 
 const server = new McpServer({ name: "mcp-multitool", version });
 
+if (isEnabled("astGrepSearch")) registerAstGrepSearch(server);
 if (isEnabled("checkFileOrDir")) registerCheckFileOrDir(server);
 if (isEnabled("deleteFileOrDir")) registerDeleteFileOrDir(server);
 if (isEnabled("moveFileOrDir")) registerMoveFileOrDir(server);

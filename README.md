@@ -10,6 +10,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server with **
 
 | Tool              | Description                                             |
 | ----------------- | ------------------------------------------------------- |
+| `astGrepSearch`   | Search code using AST patterns                          |
 | `checkFileOrDir`  | Check if a file or directory exists and return metadata |
 | `deleteFileOrDir` | Delete one or more files or directories                 |
 | `moveFileOrDir`   | Move one or more files or directories to a new location |
@@ -60,6 +61,28 @@ npx mcp-multitool
 **Cursor, Windsurf, Continue** — follow each client's MCP server documentation using the same `npx mcp-multitool` command.
 
 ## Tool Reference
+
+### `astGrepSearch`
+
+Search code using AST patterns. Matches code structure, not text. Use `$VAR` for single-node wildcards (e.g., `console.log($ARG)`), `$$$VAR` for multiple nodes. More precise than regex for code search.
+
+| Parameter | Type                 | Required | Description                                                                      |
+| --------- | -------------------- | -------- | -------------------------------------------------------------------------------- |
+| `pattern` | `string`             | ✅       | AST pattern to match. Use `$VAR` for metavariables, `$$$VAR` for multiple nodes. |
+| `paths`   | `string \| string[]` | ✅       | File or directory path(s) to search. Directories are searched recursively.       |
+| `lang`    | `string`             | ✅       | Language to parse. Built-in: `javascript`, `typescript`, `tsx`, `html`, `css`.   |
+
+**Response:** JSON object with `results` array (each with `file`, `range`, `text`) and `errors` array.
+
+**Examples:**
+
+```
+astGrepSearch  pattern="console.log($ARG)"  paths="src"  lang="typescript"
+astGrepSearch  pattern="function $NAME($$$PARAMS) { $$$BODY }"  paths=["lib", "src"]  lang="javascript"
+astGrepSearch  pattern="<div $$$ATTRS>$$$CHILDREN</div>"  paths="components"  lang="tsx"
+```
+
+---
 
 ### `checkFileOrDir`
 
@@ -215,6 +238,7 @@ wait  durationSeconds=1  reason="animation to complete"
 | ------------------------ | ------- | -------------------------------------------------------------------------------------------------------------- |
 | `waitMaxDurationSeconds` | `300`   | Override the maximum allowed `durationSeconds`. Must be a positive number. Server refuses to start if invalid. |
 | `readLogFileTimeoutMs`   | `5000`  | Override the timeout for `readLogFile` processing in milliseconds. Server refuses to start if invalid.         |
+| `astGrepSearch`          | _(on)_  | Set to `"false"` to disable the `astGrepSearch` tool at startup.                                               |
 | `checkFileOrDir`         | _(on)_  | Set to `"false"` to disable the `checkFileOrDir` tool at startup.                                              |
 | `deleteFileOrDir`        | _(on)_  | Set to `"false"` to disable the `deleteFileOrDir` tool at startup.                                             |
 | `moveFileOrDir`          | _(on)_  | Set to `"false"` to disable the `moveFileOrDir` tool at startup.                                               |

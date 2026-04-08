@@ -29,6 +29,7 @@
     "patch": "npm version patch"
   },
   "dependencies": {
+    "@ast-grep/napi": "^0.42.1",
     "@modelcontextprotocol/sdk": "1.29.0",
     "logpare": "^0.1.0",
     "zod": "^3.24.0"
