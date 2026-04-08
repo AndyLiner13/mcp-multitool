@@ -1,6 +1,6 @@
 {
   "name": "mcp-multitool",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "MCP server with file operations (delete, move) and timing utilities.",
   "license": "MIT",
   "type": "module",
