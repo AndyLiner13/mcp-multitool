@@ -8,13 +8,14 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server with **
 
 ## Tools
 
-| Tool         | Description                                        |
-| ------------ | -------------------------------------------------- |
-| `deleteFile` | Delete files or directories (single or batch)      |
-| `moveFile`   | Move files or directories to a new location        |
-| `readLog`    | Read and compress logs with 60-90% token reduction |
-| `renameFile` | Rename a single file or folder                     |
-| `wait`       | Pause execution for rate limits or timing          |
+| Tool         | Description                                          |
+| ------------ | ---------------------------------------------------- |
+| `checkFile`  | Check if a file or folder exists and return metadata |
+| `deleteFile` | Delete files or directories (single or batch)        |
+| `moveFile`   | Move files or directories to a new location          |
+| `readLog`    | Read and compress logs with 60-90% token reduction   |
+| `renameFile` | Rename a single file or folder                       |
+| `wait`       | Pause execution for rate limits or timing            |
 
 ## Why
 
@@ -59,6 +60,26 @@ npx mcp-multitool
 **Cursor, Windsurf, Continue** — follow each client's MCP server documentation using the same `npx mcp-multitool` command.
 
 ## Tool Reference
+
+### `checkFile`
+
+Check if a file or folder exists and return its metadata (type, size, timestamps, permissions). Returns an error if the path does not exist.
+
+| Parameter | Type     | Required | Description                          |
+| --------- | -------- | -------- | ------------------------------------ |
+| `path`    | `string` | ✅       | Path to the file or folder to check. |
+
+**Response:** JSON object with raw `fs.Stats` properties plus computed `name`, `path`, and `type` fields.
+
+**Examples:**
+
+```
+checkFile  path="config.json"
+checkFile  path="/var/log/"
+checkFile  path="./src/index.ts"
+```
+
+---
 
 ### `deleteFile`
 
@@ -194,6 +215,7 @@ wait  durationSeconds=1  reason="animation to complete"
 | ------------------------ | ------- | -------------------------------------------------------------------------------------------------------------- |
 | `waitMaxDurationSeconds` | `300`   | Override the maximum allowed `durationSeconds`. Must be a positive number. Server refuses to start if invalid. |
 | `readLogTimeoutMs`       | `5000`  | Override the timeout for `readLog` processing in milliseconds. Server refuses to start if invalid.             |
+| `checkFile`              | _(on)_  | Set to `"false"` to disable the `checkFile` tool at startup.                                                   |
 | `deleteFile`             | _(on)_  | Set to `"false"` to disable the `deleteFile` tool at startup.                                                  |
 | `moveFile`               | _(on)_  | Set to `"false"` to disable the `moveFile` tool at startup.                                                    |
 | `readLog`                | _(on)_  | Set to `"false"` to disable the `readLog` tool at startup.                                                     |
