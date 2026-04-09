@@ -172,47 +172,44 @@ moveFileOrDir  from="config.json"  to="dest/"  overwrite=true
 
 ### `readLogFile`
 
-Compress a log file using semantic pattern extraction (60-90% token reduction). Creates stateful drains for incremental reads. Use `flushLogFile` to release.
+Compress a log file using semantic pattern extraction. Groups similar lines into templates with `<*>` wildcards for variable parts. **Stateless** — each call processes the file fresh.
 
-**Stateful drains:** On first call for a file, creates a stateful drain. Subsequent calls append only new lines to the existing drain, preserving template IDs. This enables incremental log analysis as files grow. When any drain is active, a dynamic `flushLogFile` tool appears to release drains.
+**Content-hashed template IDs:** Template IDs are 12-character base64URL hashes derived from the pattern itself. The same pattern **always** gets the same ID, regardless of file order or when you call the tool. This means drill-down always works if the pattern still exists.
 
-| Parameter      | Type      | Required | Description                                      |
-| -------------- | --------- | -------- | ------------------------------------------------ |
-| `path`         | `string`  | ✅       | Path to the log file.                            |
-| `format`       | `string`  | ✅       | Output format: `summary`, `detailed`, or `json`. |
-| `depth`        | `integer` | ✅       | Parse tree depth (2-8).                          |
-| `simThreshold` | `number`  | ✅       | Similarity threshold (0-1).                      |
-| `tail`         | `integer` | —        | Last N lines (first read only).                  |
-| `head`         | `integer` | —        | First N lines (first read only).                 |
-| `grep`         | `string`  | —        | Regex filter for lines.                          |
+| Parameter      | Type      | Required | Description                                                        |
+| -------------- | --------- | -------- | ------------------------------------------------------------------ |
+| `path`         | `string`  | ✅       | Path to the log file.                                              |
+| `simThreshold` | `number`  | ✅       | Similarity threshold (0-1). Lower values group more aggressively.  |
+| `tail`         | `integer` | —        | Last N lines.                                                      |
+| `head`         | `integer` | —        | First N lines.                                                     |
+| `grep`         | `string`  | —        | Regex filter for lines before compression.                         |
+| `templateId`   | `string`  | —        | Drill into a specific template by its hash ID for sample captures. |
 
-**Response:** Compressed log summary showing unique templates and occurrence counts.
+**Response:** Compressed log summary showing template IDs, occurrence counts, and patterns with `<*>` wildcards.
 
 **Examples:**
 
 ```
-readLogFile  path="/var/log/app.log"  format="summary"  depth=4  simThreshold=0.4
-readLogFile  path="./logs/server.log"  format="detailed"  depth=4  simThreshold=0.4  tail=1000
-readLogFile  path="app.log"  format="json"  depth=6  simThreshold=0.3  grep="ERROR|WARN"
+readLogFile  path="/var/log/app.log"  simThreshold=0.4
+readLogFile  path="./logs/server.log"  simThreshold=0.4  tail=1000
+readLogFile  path="app.log"  simThreshold=0.3  grep="ERROR|WARN"
+readLogFile  path="app.log"  simThreshold=0.4  templateId="aB3x_Yz7Q2Kf"
 ```
 
----
+<details>
+<summary><strong>Algorithm Notes</strong></summary>
 
-### `flushLogFile` (dynamic)
+This tool implements the [Drain algorithm](https://jiemingzhu.github.io/pub/pjhe_icws2017.pdf) (He et al., ICWS 2017) for online log parsing with content-hashed template IDs:
 
-Release a log drain to free memory. Next `readLogFile` creates fresh drain. **This tool only appears when at least one drain is active.** When the last drain is flushed, the tool is automatically removed.
+**Tree routing:** Lines are routed by token count → first N tokens (default N=2, configurable via `readLogFileRoutingDepth`). This deterministic routing ensures lines with different prefixes are never compared, preventing "cross-contamination" between unrelated patterns.
 
-| Parameter | Type     | Required | Description                    |
-| --------- | -------- | -------- | ------------------------------ |
-| `path`    | `string` | ✅       | Path to the log file to flush. |
+**Content-hashed template IDs:** Template IDs are 12-character base64URL hashes derived from the pattern itself. The same pattern always produces the same ID, enabling stateless drill-down across calls.
 
-**Response:** `"Flushed {filename}. Released N templates from M lines."`
+**Wildcard matching:** Variable tokens (timestamps, IDs, numbers) are replaced with `<*>` wildcards. Tokens starting with digits or matching hex patterns are automatically routed to wildcard buckets.
 
-**Example:**
+**Tuning:** If you see all-wildcard templates (e.g., `<*> <*> <*> <*>`), try increasing `readLogFileRoutingDepth` to 3 or 4. If you hit memory issues on very large logs, reduce it to 1.
 
-```
-flushLogFile  path="/var/log/app.log"
-```
+</details>
 
 ---
 
@@ -257,18 +254,19 @@ wait  durationSeconds=1  reason="animation to complete"
 
 ## Environment Variables
 
-| Variable                 | Default | Description                                                                                                    |
-| ------------------------ | ------- | -------------------------------------------------------------------------------------------------------------- |
-| `waitMaxDurationSeconds` | `300`   | Override the maximum allowed `durationSeconds`. Must be a positive number. Server refuses to start if invalid. |
-| `readLogFileTimeoutMs`   | `5000`  | Override the timeout for `readLogFile` processing in milliseconds. Server refuses to start if invalid.         |
-| `astGrepSearch`          | _(on)_  | Set to `"false"` to disable the `astGrepSearch` tool at startup.                                               |
-| `checkFileOrDir`         | _(on)_  | Set to `"false"` to disable the `checkFileOrDir` tool at startup.                                              |
-| `cloneFileOrDir`         | _(on)_  | Set to `"false"` to disable the `cloneFileOrDir` tool at startup.                                              |
-| `deleteFileOrDir`        | _(on)_  | Set to `"false"` to disable the `deleteFileOrDir` tool at startup.                                             |
-| `moveFileOrDir`          | _(on)_  | Set to `"false"` to disable the `moveFileOrDir` tool at startup.                                               |
-| `readLogFile`            | _(on)_  | Set to `"false"` to disable the `readLogFile` tool at startup.                                                 |
-| `renameFileOrDir`        | _(on)_  | Set to `"false"` to disable the `renameFileOrDir` tool at startup.                                             |
-| `wait`                   | _(on)_  | Set to `"false"` to disable the `wait` tool at startup.                                                        |
+| Variable                  | Default | Description                                                                                                                     |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `waitMaxDurationSeconds`  | `300`   | Override the maximum allowed `durationSeconds`. Must be a positive number. Server refuses to start if invalid.                  |
+| `readLogFileTimeoutMs`    | `5000`  | Override the timeout for `readLogFile` processing in milliseconds. Server refuses to start if invalid.                          |
+| `readLogFileRoutingDepth` | `2`     | Tree routing depth (1-5). Higher values isolate more but increase memory. Tune if you see all-wildcard templates or OOM errors. |
+| `astGrepSearch`           | _(on)_  | Set to `"false"` to disable the `astGrepSearch` tool at startup.                                                                |
+| `checkFileOrDir`          | _(on)_  | Set to `"false"` to disable the `checkFileOrDir` tool at startup.                                                               |
+| `cloneFileOrDir`          | _(on)_  | Set to `"false"` to disable the `cloneFileOrDir` tool at startup.                                                               |
+| `deleteFileOrDir`         | _(on)_  | Set to `"false"` to disable the `deleteFileOrDir` tool at startup.                                                              |
+| `moveFileOrDir`           | _(on)_  | Set to `"false"` to disable the `moveFileOrDir` tool at startup.                                                                |
+| `readLogFile`             | _(on)_  | Set to `"false"` to disable the `readLogFile` tool at startup.                                                                  |
+| `renameFileOrDir`         | _(on)_  | Set to `"false"` to disable the `renameFileOrDir` tool at startup.                                                              |
+| `wait`                    | _(on)_  | Set to `"false"` to disable the `wait` tool at startup.                                                                         |
 
 ### Disabling Individual Tools
 

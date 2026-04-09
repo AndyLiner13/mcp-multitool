@@ -1,8 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { resolve, basename } from "node:path";
+import { resolve } from "node:path";
 import { z } from "zod";
-import { createDrain, type Drain, type OutputFormat } from "logpare";
 
 const timeoutMs = (() => {
   const env = process.env.readLogFileTimeoutMs;
@@ -15,42 +15,214 @@ const timeoutMs = (() => {
   return n;
 })();
 
-interface DrainState {
-  drain: Drain;
-  lastLine: number;
-  depth: number;
-  simThreshold: number;
+const routingDepth = (() => {
+  const env = process.env.readLogFileRoutingDepth;
+  if (!env) return 2;
+  const n = Number(env);
+  if (!Number.isInteger(n) || n < 1 || n > 5) {
+    process.stderr.write(
+      `Invalid readLogFileRoutingDepth: "${env}". Must be 1-5.\n`,
+    );
+    process.exit(1);
+  }
+  return n;
+})();
+
+// --- Drain Algorithm Implementation (Tree-Based) ---
+
+interface Template {
+  tokens: string[];
+  pattern: string;
+  count: number;
+  samples: string[][];
 }
 
-const drains = new Map<string, DrainState>();
-let flushTool: { remove: () => void } | null = null;
+const WILDCARD = "<*>";
+const WILDCARD_KEY = "<WILDCARD>";
+const MAX_SAMPLES = 3;
+
+function tokenize(line: string): string[] {
+  return line.split(/(\s+|[{}()\[\],:;="'`<>])/g).filter((t) => t.trim());
+}
+
+function looksLikeVariable(token: string): boolean {
+  if (token === WILDCARD) return true;
+  const first = token.charAt(0);
+  if (first >= "0" && first <= "9") return true;
+  if (/^[0-9a-fA-F]+$/.test(token) && token.length > 8) return true;
+  return false;
+}
+
+function similarity(tokens: string[], template: string[]): number {
+  if (tokens.length !== template.length) return 0;
+  let matches = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    if (template[i] === WILDCARD || tokens[i] === template[i]) matches++;
+  }
+  return matches / tokens.length;
+}
+
+function mergeTokens(tokens: string[], template: string[]): string[] {
+  return template.map((t, i) =>
+    t === WILDCARD || t !== tokens[i] ? WILDCARD : t,
+  );
+}
+
+function extractVariables(tokens: string[], template: string[]): string[] {
+  const vars: string[] = [];
+  for (let i = 0; i < template.length; i++) {
+    if (template[i] === WILDCARD && tokens[i]) vars.push(tokens[i]);
+  }
+  return vars;
+}
+
+function tokensToPattern(tokens: string[]): string {
+  return tokens.join(" ");
+}
+
+function getRouteKey(token: string | undefined): string {
+  if (!token) return WILDCARD_KEY;
+  return looksLikeVariable(token) ? WILDCARD_KEY : token;
+}
+
+function getRouteKeys(tokens: string[], depth: number): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < depth; i++) {
+    keys.push(getRouteKey(tokens[i]));
+  }
+  return keys;
+}
+
+interface TreeNode {
+  children: Map<string, TreeNode>;
+  templates: Template[];
+}
+
+function createNode(): TreeNode {
+  return { children: new Map(), templates: [] };
+}
+
+/**
+ * Tree-based Drain algorithm with configurable routing depth.
+ * Structure: root → length → token[0] → token[1] → ... → token[depth-1] → templates[]
+ * Deeper routing prevents cross-contamination but increases memory usage.
+ */
+class DrainTree {
+  private root = new Map<number, TreeNode>();
+
+  constructor(
+    private simThreshold: number,
+    private depth: number,
+  ) {}
+
+  private navigate(
+    length: number,
+    keys: string[],
+    create: boolean,
+  ): TreeNode | undefined {
+    let lengthNode = this.root.get(length);
+    if (!lengthNode) {
+      if (!create) return undefined;
+      lengthNode = createNode();
+      this.root.set(length, lengthNode);
+    }
+
+    let current = lengthNode;
+    for (const key of keys) {
+      let child = current.children.get(key);
+      if (!child) {
+        if (!create) return undefined;
+        child = createNode();
+        current.children.set(key, child);
+      }
+      current = child;
+    }
+
+    return current;
+  }
+
+  addLine(line: string): void {
+    const tokens = tokenize(line);
+    if (!tokens.length) return;
+
+    const length = tokens.length;
+    const keys = getRouteKeys(tokens, this.depth);
+
+    const node = this.navigate(length, keys, false);
+    let bestMatch: Template | null = null;
+    let bestSim = 0;
+
+    if (node) {
+      for (const template of node.templates) {
+        const sim = similarity(tokens, template.tokens);
+        if (sim >= this.simThreshold && sim > bestSim) {
+          bestSim = sim;
+          bestMatch = template;
+        }
+      }
+    }
+
+    if (bestMatch) {
+      bestMatch.tokens = mergeTokens(tokens, bestMatch.tokens);
+      bestMatch.pattern = tokensToPattern(bestMatch.tokens);
+      bestMatch.count++;
+      if (bestMatch.samples.length < MAX_SAMPLES) {
+        bestMatch.samples.push(extractVariables(tokens, bestMatch.tokens));
+      }
+    } else {
+      const targetNode = this.navigate(length, keys, true)!;
+      targetNode.templates.push({
+        tokens,
+        pattern: tokensToPattern(tokens),
+        count: 1,
+        samples: [],
+      });
+    }
+  }
+
+  getTemplates(): Template[] {
+    const result: Template[] = [];
+    const collectFromNode = (node: TreeNode): void => {
+      result.push(...node.templates);
+      for (const child of node.children.values()) {
+        collectFromNode(child);
+      }
+    };
+    for (const lengthNode of this.root.values()) {
+      collectFromNode(lengthNode);
+    }
+    return result;
+  }
+}
+
+function compress(lines: string[], simThreshold: number): Template[] {
+  const tree = new DrainTree(simThreshold, routingDepth);
+  for (const line of lines) {
+    tree.addLine(line);
+  }
+  return tree.getTemplates();
+}
+
+// --- MCP Tool ---
+
+function hashTemplateId(pattern: string): string {
+  return createHash("sha256").update(pattern).digest("base64url").slice(0, 12);
+}
 
 const schema = z.object({
   path: z.string().min(1).describe("Path to the log file."),
-  format: z.enum(["summary", "detailed", "json"]).describe("Output format."),
-  depth: z.number().int().min(2).max(8).describe("Parse tree depth (2-8)."),
   simThreshold: z
     .number()
     .min(0)
     .max(1)
-    .describe("Similarity threshold (0-1)."),
-  tail: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .describe("Last N lines (first read only)."),
-  head: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .describe("First N lines (first read only)."),
+    .describe("Similarity threshold (0-1). Lower = more aggressive grouping."),
+  tail: z.number().int().min(1).optional().describe("Last N lines."),
+  head: z.number().int().min(1).optional().describe("First N lines."),
   grep: z.string().optional().describe("Regex filter for lines."),
-});
-
-const flushSchema = z.object({
-  path: z.string().min(1).describe("Path to the log file to flush."),
+  templateId: z
+    .string()
+    .optional()
+    .describe("Drill into a specific template by its hash ID."),
 });
 
 const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
@@ -64,13 +236,13 @@ export function register(server: McpServer): void {
     "readLogFile",
     {
       description:
-        "Compress a log file using semantic pattern extraction (60-90% reduction). Creates stateful drains for incremental reads. Use flushLogFile to release.",
+        "Compress a log file using the Drain algorithm for semantic pattern extraction. Groups similar lines into templates. Stateless — each call processes the file fresh. Template IDs are content-hashed so the same pattern always has the same ID.",
       inputSchema: schema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (input) => {
       try {
-        return ok(await Promise.race([processLog(server, input), timeout()]));
+        return ok(await Promise.race([processLog(input), timeout()]));
       } catch (e) {
         return err(String(e));
       }
@@ -78,107 +250,85 @@ export function register(server: McpServer): void {
   );
 }
 
-async function processLog(
-  server: McpServer,
-  input: z.infer<typeof schema>,
-): Promise<string> {
+interface TemplateInfo {
+  id: string;
+  pattern: string;
+  count: number;
+  samples: string[][];
+}
+
+async function processLog(input: z.infer<typeof schema>): Promise<string> {
   const path = resolve(process.cwd(), input.path);
-  let state = drains.get(path);
 
   if (input.head && input.tail) {
     return "Cannot use both head and tail.";
   }
 
-  if (
-    state &&
-    (state.depth !== input.depth || state.simThreshold !== input.simThreshold)
-  ) {
-    return `Error: Drain exists with depth=${state.depth}, simThreshold=${state.simThreshold}. Flush first.`;
-  }
-
   const content = await readFile(path, "utf-8");
   let lines = content.split(/\r?\n/).filter(Boolean);
 
-  if (!state) {
-    const wasEmpty = drains.size === 0;
-    if (input.head) lines = lines.slice(0, input.head);
-    else if (input.tail) lines = lines.slice(-input.tail);
-    if (input.grep)
-      lines = lines.filter((l) => new RegExp(input.grep!).test(l));
-    if (!lines.length) return "No log lines to process.";
+  if (input.head) lines = lines.slice(0, input.head);
+  else if (input.tail) lines = lines.slice(-input.tail);
+  if (input.grep) lines = lines.filter((l) => new RegExp(input.grep!).test(l));
+  if (!lines.length) return "No log lines to process.";
 
-    const drain = createDrain({
-      depth: input.depth,
-      simThreshold: input.simThreshold,
-    });
-    drain.addLogLines(lines);
-    state = {
-      drain,
-      lastLine: lines.length,
-      depth: input.depth,
-      simThreshold: input.simThreshold,
-    };
-    drains.set(path, state);
+  const templates = compress(lines, input.simThreshold);
+  const templateMap = buildTemplateMap(templates);
 
-    if (wasEmpty) registerFlush(server);
-    return `${state.drain.getResult(input.format as OutputFormat).formatted}\n\n[New drain. ${state.lastLine} lines. Use flushLogFile when done.]`;
+  if (input.templateId) {
+    const template = templateMap.get(input.templateId);
+    if (!template) {
+      const available = [...templateMap.keys()].slice(0, 10).join(", ");
+      return `Template "${input.templateId}" not found. Available: ${available}${templateMap.size > 10 ? ` (+${templateMap.size - 10} more)` : ""}`;
+    }
+    return formatDrillDown(template);
   }
 
-  const newLines = lines.slice(state.lastLine);
-  if (!newLines.length) {
-    return `${state.drain.getResult(input.format as OutputFormat).formatted}\n\n[No new lines. Total: ${state.lastLine}]`;
-  }
-
-  const filtered =
-    input.grep ?
-      newLines.filter((l) => new RegExp(input.grep!).test(l))
-    : newLines;
-  if (filtered.length) state.drain.addLogLines(filtered);
-  state.lastLine = lines.length;
-
-  return `${state.drain.getResult(input.format as OutputFormat).formatted}\n\n[+${newLines.length} lines. Total: ${state.lastLine}]`;
+  return formatOverview(templateMap, lines.length);
 }
 
-function registerFlush(server: McpServer): void {
-  if (flushTool) return;
-  try {
-    flushTool = server.registerTool(
-      "flushLogFile",
-      {
-        description:
-          "Release a log drain to free memory. Next readLogFile creates fresh drain.",
-        inputSchema: flushSchema,
-        annotations: { destructiveHint: false, idempotentHint: true },
-      },
-      async (input) => {
-        try {
-          const path = resolve(process.cwd(), input.path);
-          const state = drains.get(path);
-          if (!state) {
-            if (!drains.size) return ok("No active drains.");
-            return ok(
-              `No drain for "${basename(path)}". Active: ${[...drains.keys()].map((p) => basename(p)).join(", ")}`,
-            );
-          }
-          const { totalClusters, lastLine } = {
-            totalClusters: state.drain.totalClusters,
-            lastLine: state.lastLine,
-          };
-          drains.delete(path);
-          if (!drains.size && flushTool) {
-            flushTool.remove();
-            flushTool = null;
-          }
-          return ok(
-            `Flushed ${basename(path)}. Released ${totalClusters} templates from ${lastLine} lines.`,
-          );
-        } catch (e) {
-          return err(String(e));
-        }
-      },
-    ) as { remove: () => void };
-    server.sendToolListChanged();
-  } catch {}
+function buildTemplateMap(templates: Template[]): Map<string, TemplateInfo> {
+  const map = new Map<string, TemplateInfo>();
+  for (const t of templates) {
+    const id = hashTemplateId(t.pattern);
+    map.set(id, {
+      id,
+      pattern: t.pattern,
+      count: t.count,
+      samples: t.samples,
+    });
+  }
+  return map;
+}
+
+function formatOverview(
+  templateMap: Map<string, TemplateInfo>,
+  lineCount: number,
+): string {
+  const sorted = [...templateMap.values()].sort((a, b) => b.count - a.count);
+  const reduction = Math.round((1 - templateMap.size / lineCount) * 100);
+
+  const header = `=== Log Compression ===\n${lineCount} lines → ${templateMap.size} templates (${reduction}% reduction)\n`;
+
+  const top20 = sorted.slice(0, 20);
+  const topLines = top20
+    .map((t) => `${t.id} [${t.count}x] ${t.pattern}`)
+    .join("\n");
+
+  const remaining = sorted.length - 20;
+  const footer = remaining > 0 ? `\n... and ${remaining} more templates` : "";
+
+  return `${header}\n${topLines}${footer}`;
+}
+
+function formatDrillDown(template: TemplateInfo): string {
+  const header = `Template: ${template.id}\nPattern: ${template.pattern}\nMatches: ${template.count}\n`;
+  if (!template.samples.length) return header;
+
+  const samples = template.samples
+    .map((vars, i) => `  ${i + 1}. Variables: ${vars.join(", ")}`)
+    .join("\n");
+  return `${header}\nSample variable captures:\n${samples}`;
 }
 
 function timeout(): Promise<never> {
