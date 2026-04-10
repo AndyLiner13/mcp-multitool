@@ -178,16 +178,17 @@ Compress a log file using semantic pattern extraction. Groups similar lines into
 
 **Content-hashed template IDs:** Template IDs are 12-character base64URL hashes derived from the pattern itself. The same pattern **always** gets the same ID, regardless of file order or when you call the tool. This means drill-down always works if the pattern still exists.
 
-| Parameter      | Type      | Required | Description                                                        |
-| -------------- | --------- | -------- | ------------------------------------------------------------------ |
-| `path`         | `string`  | ✅       | Path to the log file.                                              |
-| `simThreshold` | `number`  | ✅       | Similarity threshold (0-1). Lower values group more aggressively.  |
-| `tail`         | `integer` | —        | Last N lines.                                                      |
-| `head`         | `integer` | —        | First N lines.                                                     |
-| `grep`         | `string`  | —        | Regex filter for lines before compression.                         |
-| `templateId`   | `string`  | —        | Drill into a specific template by its hash ID for sample captures. |
+| Parameter      | Type      | Required | Description                                                                   |
+| -------------- | --------- | -------- | ----------------------------------------------------------------------------- |
+| `path`         | `string`  | ✅       | Path to the log file.                                                         |
+| `simThreshold` | `number`  | ✅       | Similarity threshold (0-1). Lower values group more aggressively.             |
+| `tail`         | `integer` | —        | Last N lines.                                                                 |
+| `head`         | `integer` | —        | First N lines.                                                                |
+| `grep`         | `string`  | —        | Regex filter for lines. Smart case: all-lowercase = case-insensitive.         |
+| `lineStart`    | `string`  | —        | Regex for entry start lines. Non-matching lines join previous entry with `⏎`. |
+| `templateId`   | `string`  | —        | Drill into a specific template by its hash ID for sample captures.            |
 
-**Response:** Compressed log summary showing template IDs, occurrence counts, and patterns with `<*>` wildcards.
+**Response:** Compressed log summary with header showing line reduction, character reduction, template IDs, occurrence counts, and patterns with `<*>` wildcards.
 
 **Examples:**
 
@@ -196,6 +197,7 @@ readLogFile  path="/var/log/app.log"  simThreshold=0.4
 readLogFile  path="./logs/server.log"  simThreshold=0.4  tail=1000
 readLogFile  path="app.log"  simThreshold=0.3  grep="ERROR|WARN"
 readLogFile  path="app.log"  simThreshold=0.4  templateId="aB3x_Yz7Q2Kf"
+readLogFile  path="tsserver.log"  simThreshold=0.5  lineStart="^(Info|Err|Perf)\\s+\\d+"
 ```
 
 <details>

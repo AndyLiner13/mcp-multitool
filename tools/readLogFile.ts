@@ -209,6 +209,28 @@ function hashTemplateId(pattern: string): string {
   return createHash("sha256").update(pattern).digest("base64url").slice(0, 12);
 }
 
+const CONTINUATION_MARKER = " \u23CE ";
+
+function joinMultilineEntries(
+  lines: string[],
+  lineStartPattern: RegExp,
+): string[] {
+  const result: string[] = [];
+  let current = "";
+
+  for (const line of lines) {
+    if (lineStartPattern.test(line)) {
+      if (current) result.push(current);
+      current = line;
+    } else {
+      current += CONTINUATION_MARKER + line;
+    }
+  }
+  if (current) result.push(current);
+
+  return result;
+}
+
 const schema = z.object({
   path: z.string().min(1).describe("Path to the log file."),
   simThreshold: z
@@ -218,7 +240,18 @@ const schema = z.object({
     .describe("Similarity threshold (0-1). Lower = more aggressive grouping."),
   tail: z.number().int().min(1).optional().describe("Last N lines."),
   head: z.number().int().min(1).optional().describe("First N lines."),
-  grep: z.string().optional().describe("Regex filter for lines."),
+  grep: z
+    .string()
+    .optional()
+    .describe(
+      "Regex filter for lines. Smart case: all-lowercase pattern = case-insensitive, any uppercase = exact case.",
+    ),
+  lineStart: z
+    .string()
+    .optional()
+    .describe(
+      "Regex identifying log entry start lines. Lines not matching are joined to previous entry with \u23CE. For tsserver: ^(Info|Err|Perf)\\s+\\d+",
+    ),
   templateId: z
     .string()
     .optional()
@@ -269,9 +302,30 @@ async function processLog(input: z.infer<typeof schema>): Promise<string> {
 
   if (input.head) lines = lines.slice(0, input.head);
   else if (input.tail) lines = lines.slice(-input.tail);
-  if (input.grep) lines = lines.filter((l) => new RegExp(input.grep!).test(l));
+  if (input.lineStart) {
+    let lineStartRe: RegExp;
+    try {
+      lineStartRe = new RegExp(input.lineStart);
+    } catch {
+      return `Invalid lineStart regex: "${input.lineStart}"`;
+    }
+    lines = joinMultilineEntries(lines, lineStartRe);
+  }
+
+  if (input.grep) {
+    let re: RegExp;
+    try {
+      // Smart case: all-lowercase pattern → case-insensitive (like ripgrep --smart-case)
+      const flags = /[A-Z]/.test(input.grep) ? "" : "i";
+      re = new RegExp(input.grep, flags);
+    } catch {
+      return `Invalid grep regex: "${input.grep}"`;
+    }
+    lines = lines.filter((l) => re.test(l));
+  }
   if (!lines.length) return "No log lines to process.";
 
+  const inputLength = lines.reduce((sum, l) => sum + l.length, 0);
   const templates = compress(lines, input.simThreshold);
   const templateMap = buildTemplateMap(templates);
 
@@ -284,7 +338,7 @@ async function processLog(input: z.infer<typeof schema>): Promise<string> {
     return formatDrillDown(template);
   }
 
-  return formatOverview(templateMap, lines.length);
+  return formatOverview(templateMap, lines.length, inputLength);
 }
 
 function buildTemplateMap(templates: Template[]): Map<string, TemplateInfo> {
@@ -304,11 +358,10 @@ function buildTemplateMap(templates: Template[]): Map<string, TemplateInfo> {
 function formatOverview(
   templateMap: Map<string, TemplateInfo>,
   lineCount: number,
+  inputLength: number,
 ): string {
   const sorted = [...templateMap.values()].sort((a, b) => b.count - a.count);
-  const reduction = Math.round((1 - templateMap.size / lineCount) * 100);
-
-  const header = `=== Log Compression ===\n${lineCount} lines → ${templateMap.size} templates (${reduction}% reduction)\n`;
+  const lineReduction = Math.round((1 - templateMap.size / lineCount) * 100);
 
   const top20 = sorted.slice(0, 20);
   const topLines = top20
@@ -318,7 +371,16 @@ function formatOverview(
   const remaining = sorted.length - 20;
   const footer = remaining > 0 ? `\n... and ${remaining} more templates` : "";
 
-  return `${header}\n${topLines}${footer}`;
+  const body = `${topLines}${footer}`;
+  const outputLength = body.length;
+  const charReduction = Math.round((1 - outputLength / inputLength) * 100);
+
+  const header =
+    `=== Log Compression ===\n` +
+    `${lineCount} lines → ${templateMap.size} templates (${lineReduction}% reduction)\n` +
+    `${inputLength.toLocaleString()} chars → ${outputLength.toLocaleString()} chars (${charReduction}% reduction)\n`;
+
+  return `${header}\n${body}`;
 }
 
 function formatDrillDown(template: TemplateInfo): string {
