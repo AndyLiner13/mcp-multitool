@@ -1,6 +1,39 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Lang, findInFiles } from "@ast-grep/napi";
+import { Lang, findInFiles, parse, type SgNode } from "@ast-grep/napi";
+
+function validatePattern(
+  lang: string,
+  pattern: string,
+): { valid: true } | { valid: false; error: string } {
+  const tree = parse(lang as Lang, pattern);
+  const root = tree.root();
+
+  function findErrors(node: SgNode): string[] {
+    const errors: string[] = [];
+    if (node.kind() === "ERROR") {
+      errors.push(`"${node.text().slice(0, 50)}"`);
+    }
+    for (const child of node.children()) {
+      errors.push(...findErrors(child));
+    }
+    return errors;
+  }
+
+  const errors = findErrors(root);
+  if (errors.length > 0) {
+    return {
+      valid: false,
+      error:
+        `Pattern "${pattern}" is not valid ${lang} syntax.\n` +
+        `Invalid syntax near: ${errors.join(", ")}\n\n` +
+        `Tip: Patterns must be syntactically complete code fragments. ` +
+        `For example, "class X" is invalid (needs body), use "class X { $$$BODY }" instead.`,
+    };
+  }
+
+  return { valid: true };
+}
 
 const builtinLangs = [
   "javascript",
@@ -53,6 +86,14 @@ export function register(server: McpServer): void {
       try {
         const lang = langMap[input.lang];
         const paths = Array.isArray(input.paths) ? input.paths : [input.paths];
+
+        const validation = validatePattern(lang, input.pattern);
+        if (!validation.valid) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: validation.error }],
+          };
+        }
 
         const results: Array<{
           file: string;

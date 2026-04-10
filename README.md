@@ -75,6 +75,8 @@ Search code using AST patterns. Matches code structure, not text. Use `$VAR` for
 
 **Response:** JSON object with `results` array (each with `file`, `range`, `text`) and `errors` array.
 
+**Pattern Validation:** Patterns are validated before search. Invalid patterns (e.g., `class X` without a body, `function foo` without parentheses) return an error explaining the issue. Patterns must be syntactically complete code fragments.
+
 **Examples:**
 
 ```
