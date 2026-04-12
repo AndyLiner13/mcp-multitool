@@ -34,12 +34,15 @@ interface Template {
   tokens: string[];
   pattern: string;
   count: number;
-  samples: string[][];
+  // Indices into the original lines array — used by drill-down to retrieve source text
+  lineIndices: number[];
 }
 
 const WILDCARD = "<*>";
 const WILDCARD_KEY = "<WILDCARD>";
-const MAX_SAMPLES = 3;
+const CONTINUATION_MARKER = " \u23CE ";
+
+// --- Tokenization ---
 
 function tokenize(line: string): string[] {
   return line.split(/(\s+|[{}()\[\],:;="'`<>])/g).filter((t) => t.trim());
@@ -66,14 +69,6 @@ function mergeTokens(tokens: string[], template: string[]): string[] {
   return template.map((t, i) =>
     t === WILDCARD || t !== tokens[i] ? WILDCARD : t,
   );
-}
-
-function extractVariables(tokens: string[], template: string[]): string[] {
-  const vars: string[] = [];
-  for (let i = 0; i < template.length; i++) {
-    if (template[i] === WILDCARD && tokens[i]) vars.push(tokens[i]);
-  }
-  return vars;
 }
 
 function tokensToPattern(tokens: string[]): string {
@@ -141,7 +136,7 @@ class DrainTree {
     return current;
   }
 
-  addLine(line: string): void {
+  addLine(line: string, lineIndex: number): void {
     const tokens = tokenize(line);
     if (!tokens.length) return;
 
@@ -166,16 +161,14 @@ class DrainTree {
       bestMatch.tokens = mergeTokens(tokens, bestMatch.tokens);
       bestMatch.pattern = tokensToPattern(bestMatch.tokens);
       bestMatch.count++;
-      if (bestMatch.samples.length < MAX_SAMPLES) {
-        bestMatch.samples.push(extractVariables(tokens, bestMatch.tokens));
-      }
+      bestMatch.lineIndices.push(lineIndex);
     } else {
       const targetNode = this.navigate(length, keys, true)!;
       targetNode.templates.push({
         tokens,
         pattern: tokensToPattern(tokens),
         count: 1,
-        samples: [],
+        lineIndices: [lineIndex],
       });
     }
   }
@@ -197,9 +190,11 @@ class DrainTree {
 
 function compress(lines: string[], simThreshold: number): Template[] {
   const tree = new DrainTree(simThreshold, routingDepth);
-  for (const line of lines) {
-    tree.addLine(line);
+
+  for (let i = 0; i < lines.length; i++) {
+    tree.addLine(lines[i], i);
   }
+
   return tree.getTemplates();
 }
 
@@ -208,8 +203,6 @@ function compress(lines: string[], simThreshold: number): Template[] {
 function hashTemplateId(pattern: string): string {
   return createHash("sha256").update(pattern).digest("base64url").slice(0, 12);
 }
-
-const CONTINUATION_MARKER = " \u23CE ";
 
 function joinMultilineEntries(
   lines: string[],
@@ -256,6 +249,18 @@ const schema = z.object({
     .string()
     .optional()
     .describe("Drill into a specific template by its hash ID."),
+  startLine: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("1-based line number to start reading from (inclusive)."),
+  endLine: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("1-based line number to stop reading at (inclusive)."),
 });
 
 const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
@@ -287,7 +292,7 @@ interface TemplateInfo {
   id: string;
   pattern: string;
   count: number;
-  samples: string[][];
+  lineIndices: number[];
 }
 
 async function processLog(input: z.infer<typeof schema>): Promise<string> {
@@ -299,6 +304,12 @@ async function processLog(input: z.infer<typeof schema>): Promise<string> {
 
   const content = await readFile(path, "utf-8");
   let lines = content.split(/\r?\n/).filter(Boolean);
+
+  if (input.startLine || input.endLine) {
+    const start = (input.startLine ?? 1) - 1;
+    const end = input.endLine ?? lines.length;
+    lines = lines.slice(start, end);
+  }
 
   if (input.head) lines = lines.slice(0, input.head);
   else if (input.tail) lines = lines.slice(-input.tail);
@@ -315,7 +326,6 @@ async function processLog(input: z.infer<typeof schema>): Promise<string> {
   if (input.grep) {
     let re: RegExp;
     try {
-      // Smart case: all-lowercase pattern → case-insensitive (like ripgrep --smart-case)
       const flags = /[A-Z]/.test(input.grep) ? "" : "i";
       re = new RegExp(input.grep, flags);
     } catch {
@@ -335,7 +345,7 @@ async function processLog(input: z.infer<typeof schema>): Promise<string> {
       const available = [...templateMap.keys()].slice(0, 10).join(", ");
       return `Template "${input.templateId}" not found. Available: ${available}${templateMap.size > 10 ? ` (+${templateMap.size - 10} more)` : ""}`;
     }
-    return formatDrillDown(template);
+    return formatDrillDown(template, lines);
   }
 
   return formatOverview(templateMap, lines.length, inputLength);
@@ -343,15 +353,17 @@ async function processLog(input: z.infer<typeof schema>): Promise<string> {
 
 function buildTemplateMap(templates: Template[]): Map<string, TemplateInfo> {
   const map = new Map<string, TemplateInfo>();
+
   for (const t of templates) {
     const id = hashTemplateId(t.pattern);
     map.set(id, {
       id,
       pattern: t.pattern,
       count: t.count,
-      samples: t.samples,
+      lineIndices: t.lineIndices,
     });
   }
+
   return map;
 }
 
@@ -363,15 +375,9 @@ function formatOverview(
   const sorted = [...templateMap.values()].sort((a, b) => b.count - a.count);
   const lineReduction = Math.round((1 - templateMap.size / lineCount) * 100);
 
-  const top20 = sorted.slice(0, 20);
-  const topLines = top20
+  const body = sorted
     .map((t) => `${t.id} [${t.count}x] ${t.pattern}`)
     .join("\n");
-
-  const remaining = sorted.length - 20;
-  const footer = remaining > 0 ? `\n... and ${remaining} more templates` : "";
-
-  const body = `${topLines}${footer}`;
   const outputLength = body.length;
   const charReduction = Math.round((1 - outputLength / inputLength) * 100);
 
@@ -383,14 +389,14 @@ function formatOverview(
   return `${header}\n${body}`;
 }
 
-function formatDrillDown(template: TemplateInfo): string {
+function formatDrillDown(template: TemplateInfo, lines: string[]): string {
   const header = `Template: ${template.id}\nPattern: ${template.pattern}\nMatches: ${template.count}\n`;
-  if (!template.samples.length) return header;
+  if (!template.lineIndices.length) return header;
 
-  const samples = template.samples
-    .map((vars, i) => `  ${i + 1}. Variables: ${vars.join(", ")}`)
+  const matchedLines = template.lineIndices
+    .map((idx) => `  Line ${idx + 1}: ${lines[idx]}`)
     .join("\n");
-  return `${header}\nSample variable captures:\n${samples}`;
+  return `${header}\n${matchedLines}`;
 }
 
 function timeout(): Promise<never> {

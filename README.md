@@ -178,17 +178,19 @@ Compress a log file using semantic pattern extraction. Groups similar lines into
 
 **Content-hashed template IDs:** Template IDs are 12-character base64URL hashes derived from the pattern itself. The same pattern **always** gets the same ID, regardless of file order or when you call the tool. This means drill-down always works if the pattern still exists.
 
-| Parameter      | Type      | Required | Description                                                                   |
-| -------------- | --------- | -------- | ----------------------------------------------------------------------------- |
-| `path`         | `string`  | ✅       | Path to the log file.                                                         |
-| `simThreshold` | `number`  | ✅       | Similarity threshold (0-1). Lower values group more aggressively.             |
-| `tail`         | `integer` | —        | Last N lines.                                                                 |
-| `head`         | `integer` | —        | First N lines.                                                                |
-| `grep`         | `string`  | —        | Regex filter for lines. Smart case: all-lowercase = case-insensitive.         |
-| `lineStart`    | `string`  | —        | Regex for entry start lines. Non-matching lines join previous entry with `⏎`. |
-| `templateId`   | `string`  | —        | Drill into a specific template by its hash ID for sample captures.            |
+| Parameter      | Type      | Required | Description                                                                                                 |
+| -------------- | --------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `path`         | `string`  | ✅       | Path to the log file.                                                                                       |
+| `simThreshold` | `number`  | ✅       | Similarity threshold (0-1). Lower values group more aggressively.                                           |
+| `startLine`    | `integer` | —        | 1-based line number to start reading from (inclusive).                                                      |
+| `endLine`      | `integer` | —        | 1-based line number to stop reading at (inclusive).                                                         |
+| `tail`         | `integer` | —        | Last N lines (within the range if `startLine`/`endLine` are set).                                           |
+| `head`         | `integer` | —        | First N lines (within the range if `startLine`/`endLine` are set).                                          |
+| `grep`         | `string`  | —        | Regex filter for lines. Smart case: all-lowercase = case-insensitive.                                       |
+| `lineStart`    | `string`  | —        | Regex for entry start lines. Non-matching lines join previous entry with `⏎`.                               |
+| `templateId`   | `string`  | —        | Drill into a specific template by its hash ID. Returns all matching source lines with 1-based line numbers. |
 
-**Response:** Compressed log summary with header showing line reduction, character reduction, template IDs, occurrence counts, and patterns with `<*>` wildcards.
+**Response:** Compressed log summary with header showing line reduction, character reduction, template IDs, occurrence counts, and patterns.
 
 **Examples:**
 
@@ -198,6 +200,8 @@ readLogFile  path="./logs/server.log"  simThreshold=0.4  tail=1000
 readLogFile  path="app.log"  simThreshold=0.3  grep="ERROR|WARN"
 readLogFile  path="app.log"  simThreshold=0.4  templateId="aB3x_Yz7Q2Kf"
 readLogFile  path="tsserver.log"  simThreshold=0.5  lineStart="^(Info|Err|Perf)\\s+\\d+"
+readLogFile  path="app.log"  simThreshold=0.4  startLine=500  endLine=800
+readLogFile  path="app.log"  simThreshold=0.4  startLine=1000
 ```
 
 <details>
@@ -205,11 +209,15 @@ readLogFile  path="tsserver.log"  simThreshold=0.5  lineStart="^(Info|Err|Perf)\
 
 This tool implements the [Drain algorithm](https://jiemingzhu.github.io/pub/pjhe_icws2017.pdf) (He et al., ICWS 2017) for online log parsing with content-hashed template IDs:
 
+**No opinionated preprocessing:** Lines are fed directly to Drain without format-specific masking. The algorithm works on any text file — logs, CSVs, JSONL, or anything else. Use `grep` and `lineStart` to scope the input if needed.
+
 **Tree routing:** Lines are routed by token count → first N tokens (default N=2, configurable via `readLogFileRoutingDepth`). This deterministic routing ensures lines with different prefixes are never compared, preventing "cross-contamination" between unrelated patterns.
 
 **Content-hashed template IDs:** Template IDs are 12-character base64URL hashes derived from the pattern itself. The same pattern always produces the same ID, enabling stateless drill-down across calls.
 
 **Wildcard matching:** Variable tokens (timestamps, IDs, numbers) are replaced with `<*>` wildcards. Tokens starting with digits or matching hex patterns are automatically routed to wildcard buckets.
+
+**Drill-down returns source lines:** When you provide `templateId`, the tool returns all source lines that matched that template, each prefixed with its 1-based line number — the original text, not extracted variables or placeholders.
 
 **Tuning:** If you see all-wildcard templates (e.g., `<*> <*> <*> <*>`), try increasing `readLogFileRoutingDepth` to 3 or 4. If you hit memory issues on very large logs, reduce it to 1.
 
