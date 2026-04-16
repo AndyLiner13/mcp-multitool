@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
+import {
+  extractMetadata,
+  matchesFilter,
+  type LogLevel,
+} from "../packages/log-grammar/extractor.js";
 
 const timeoutMs = (() => {
   const env = process.env.readLogFileTimeoutMs;
@@ -234,10 +239,10 @@ const schema = z.object({
   tail: z.number().int().min(1).optional().describe("Last N lines."),
   head: z.number().int().min(1).optional().describe("First N lines."),
   grep: z
-    .string()
+    .union([z.string(), z.array(z.string())])
     .optional()
     .describe(
-      "Regex filter for lines. Smart case: all-lowercase pattern = case-insensitive, any uppercase = exact case.",
+      "Regex filter for lines (OR logic if array). Smart case: all-lowercase = case-insensitive.",
     ),
   lineStart: z
     .string()
@@ -261,6 +266,43 @@ const schema = z.object({
     .min(1)
     .optional()
     .describe("1-based line number to stop reading at (inclusive)."),
+  // Structured filters (extracted from log grammar patterns)
+  level: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe(
+      'Log level filter: "error", "warn", "info", "debug", "trace" or array of levels.',
+    ),
+  startTime: z
+    .string()
+    .optional()
+    .describe(
+      "Include lines with timestamps >= this value. ISO format (2026-04-13T10:00:00) or time only (10:00:00).",
+    ),
+  endTime: z
+    .string()
+    .optional()
+    .describe(
+      "Include lines with timestamps <= this value. ISO format or time only.",
+    ),
+  status: z
+    .union([z.number().int(), z.array(z.number().int())])
+    .optional()
+    .describe(
+      "HTTP status code filter: single code or array (e.g., [500, 502, 503]).",
+    ),
+  hasException: z
+    .boolean()
+    .optional()
+    .describe(
+      "If true, only lines with exception/stack trace patterns. If false, exclude them.",
+    ),
+  matchUuid: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe(
+      "Filter to lines containing any of these UUIDs (OR logic if array).",
+    ),
 });
 
 const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
@@ -324,15 +366,36 @@ async function processLog(input: z.infer<typeof schema>): Promise<string> {
   }
 
   if (input.grep) {
-    let re: RegExp;
-    try {
-      const flags = /[A-Z]/.test(input.grep) ? "" : "i";
-      re = new RegExp(input.grep, flags);
-    } catch {
-      return `Invalid grep regex: "${input.grep}"`;
+    const patterns = Array.isArray(input.grep) ? input.grep : [input.grep];
+    const regexes: RegExp[] = [];
+    for (const pattern of patterns) {
+      try {
+        const flags = /[A-Z]/.test(pattern) ? "" : "i";
+        regexes.push(new RegExp(pattern, flags));
+      } catch {
+        return `Invalid grep regex: "${pattern}"`;
+      }
     }
-    lines = lines.filter((l) => re.test(l));
+    lines = lines.filter((l) => regexes.some((re) => re.test(l)));
   }
+
+  // Apply structured filters using extracted metadata
+  const hasStructuredFilters =
+    input.level !== undefined ||
+    input.startTime !== undefined ||
+    input.endTime !== undefined ||
+    input.status !== undefined ||
+    input.hasException !== undefined ||
+    input.matchUuid !== undefined;
+
+  if (hasStructuredFilters) {
+    const filter = buildFilter(input);
+    lines = lines.filter((line) => {
+      const metadata = extractMetadata(line);
+      return matchesFilter(metadata, filter);
+    });
+  }
+
   if (!lines.length) return "No log lines to process.";
 
   const inputLength = lines.reduce((sum, l) => sum + l.length, 0);
@@ -403,4 +466,83 @@ function timeout(): Promise<never> {
   return new Promise((_, rej) =>
     setTimeout(() => rej(new Error(`Timeout: ${timeoutMs}ms`)), timeoutMs),
   );
+}
+
+// --- Structured Filter Builder ---
+
+function buildFilter(input: z.infer<typeof schema>): {
+  levels?: LogLevel[];
+  startTime?: Date;
+  endTime?: Date;
+  statusCodes?: number[];
+  hasException?: boolean;
+  matchUuids?: string[];
+} {
+  const filter: ReturnType<typeof buildFilter> = {};
+
+  // Parse level(s)
+  if (input.level !== undefined) {
+    const levels = Array.isArray(input.level) ? input.level : [input.level];
+    filter.levels = levels
+      .filter((l): l is LogLevel =>
+        ["trace", "debug", "info", "warn", "error"].includes(l.toLowerCase()),
+      )
+      .map((l) => l.toLowerCase() as LogLevel);
+  }
+
+  // Parse timestamps
+  if (input.startTime !== undefined) {
+    filter.startTime = parseTimestamp(input.startTime);
+  }
+  if (input.endTime !== undefined) {
+    filter.endTime = parseTimestamp(input.endTime);
+  }
+
+  // Parse status codes
+  if (input.status !== undefined) {
+    filter.statusCodes =
+      Array.isArray(input.status) ? input.status : [input.status];
+  }
+
+  // Boolean filters
+  if (input.hasException !== undefined) {
+    filter.hasException = input.hasException;
+  }
+
+  // UUID filter (convert to array)
+  if (input.matchUuid !== undefined) {
+    filter.matchUuids =
+      Array.isArray(input.matchUuid) ? input.matchUuid : [input.matchUuid];
+  }
+
+  return filter;
+}
+
+/**
+ * Parse a timestamp string into a Date.
+ * Supports ISO format (2026-04-13T10:00:00) or time only (10:00:00).
+ */
+function parseTimestamp(str: string): Date | undefined {
+  // Try ISO parse first
+  const iso = Date.parse(str);
+  if (!isNaN(iso)) return new Date(iso);
+
+  // Try time-only format (HH:MM:SS or HH:MM:SS.mmm)
+  const timeMatch = str.match(
+    /^(\d{1,2}):(\d{2})(?::(\d{2})(?:[.,](\d{1,3}))?)?$/,
+  );
+  if (timeMatch) {
+    const now = new Date();
+    return new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      parseInt(timeMatch[1], 10),
+      parseInt(timeMatch[2], 10),
+      timeMatch[3] ? parseInt(timeMatch[3], 10) : 0,
+      timeMatch[4] ? parseInt(timeMatch[4].padEnd(3, "0"), 10) : 0,
+    );
+  }
+
+  return undefined;
 }

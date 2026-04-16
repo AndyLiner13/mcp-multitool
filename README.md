@@ -178,17 +178,23 @@ Compress a log file using semantic pattern extraction. Groups similar lines into
 
 **Content-hashed template IDs:** Template IDs are 12-character base64URL hashes derived from the pattern itself. The same pattern **always** gets the same ID, regardless of file order or when you call the tool. This means drill-down always works if the pattern still exists.
 
-| Parameter      | Type      | Required | Description                                                                                                 |
-| -------------- | --------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `path`         | `string`  | ✅       | Path to the log file.                                                                                       |
-| `simThreshold` | `number`  | ✅       | Similarity threshold (0-1). Lower values group more aggressively.                                           |
-| `startLine`    | `integer` | —        | 1-based line number to start reading from (inclusive).                                                      |
-| `endLine`      | `integer` | —        | 1-based line number to stop reading at (inclusive).                                                         |
-| `tail`         | `integer` | —        | Last N lines (within the range if `startLine`/`endLine` are set).                                           |
-| `head`         | `integer` | —        | First N lines (within the range if `startLine`/`endLine` are set).                                          |
-| `grep`         | `string`  | —        | Regex filter for lines. Smart case: all-lowercase = case-insensitive.                                       |
-| `lineStart`    | `string`  | —        | Regex for entry start lines. Non-matching lines join previous entry with `⏎`.                               |
-| `templateId`   | `string`  | —        | Drill into a specific template by its hash ID. Returns all matching source lines with 1-based line numbers. |
+| Parameter      | Type                   | Required | Description                                                                                                 |
+| -------------- | ---------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `path`         | `string`               | ✅       | Path to the log file.                                                                                       |
+| `simThreshold` | `number`               | ✅       | Similarity threshold (0-1). Lower values group more aggressively.                                           |
+| `startLine`    | `integer`              | —        | 1-based line number to start reading from (inclusive).                                                      |
+| `endLine`      | `integer`              | —        | 1-based line number to stop reading at (inclusive).                                                         |
+| `tail`         | `integer`              | —        | Last N lines (within the range if `startLine`/`endLine` are set).                                           |
+| `head`         | `integer`              | —        | First N lines (within the range if `startLine`/`endLine` are set).                                          |
+| `grep`         | `string \| string[]`   | —        | Regex filter (OR logic if array). Smart case: all-lowercase = case-insensitive.                             |
+| `lineStart`    | `string`               | —        | Regex for entry start lines. Non-matching lines join previous entry with `⏎`.                               |
+| `templateId`   | `string`               | —        | Drill into a specific template by its hash ID. Returns all matching source lines with 1-based line numbers. |
+| `level`        | `string \| string[]`   | —        | Log level filter: `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` or array of levels.                   |
+| `startTime`    | `string`               | —        | Include lines with timestamps >= this value. ISO format or time only (e.g., `"10:00:00"`).                  |
+| `endTime`      | `string`               | —        | Include lines with timestamps <= this value. ISO format or time only.                                       |
+| `status`       | `integer \| integer[]` | —        | HTTP status code filter: single code or array (e.g., `[500, 502, 503]`).                                    |
+| `hasException` | `boolean`              | —        | If true, only lines with exception/stack trace patterns. If false, exclude them.                            |
+| `matchUuid`    | `string \| string[]`   | —        | Filter to lines containing any of these UUIDs (OR logic if array).                                          |
 
 **Response:** Compressed log summary with header showing line reduction, character reduction, template IDs, occurrence counts, and patterns.
 
@@ -202,7 +208,38 @@ readLogFile  path="app.log"  simThreshold=0.4  templateId="aB3x_Yz7Q2Kf"
 readLogFile  path="tsserver.log"  simThreshold=0.5  lineStart="^(Info|Err|Perf)\\s+\\d+"
 readLogFile  path="app.log"  simThreshold=0.4  startLine=500  endLine=800
 readLogFile  path="app.log"  simThreshold=0.4  startLine=1000
+readLogFile  path="server.log"  simThreshold=0.5  level=["error","warn"]
+readLogFile  path="api.log"  simThreshold=0.5  status=[500,502,503]  hasException=true
+readLogFile  path="app.log"  simThreshold=0.5  startTime="10:00:00"  endTime="10:30:00"
+readLogFile  path="app.log"  simThreshold=0.5  grep=["timeout", "connection refused"]
+readLogFile  path="api.log"  simThreshold=0.5  matchUuid=["abc-123", "def-456"]
 ```
+
+<details>
+<summary><strong>Structured Filter Patterns</strong></summary>
+
+The structured filters (`level`, `startTime`, `endTime`, `status`, `hasException`, `matchUuid`, `grep`) use pattern matching extracted from log lines.
+
+**Filter logic:**
+
+- **Between filter types:** AND logic — a line must match ALL specified criteria
+- **Within arrays:** OR logic — a line matches if ANY item in the array matches
+
+**Log levels recognized:**
+
+- `error`: ERROR, Error, Err, FAIL, FATAL, CRITICAL, [error], [e]
+- `warn`: WARNING, WARN, Warn, [warning], [warn], [w]
+- `info`: INFO, Info, INFORMATION, HINT, [info], [i]
+- `debug`: DEBUG, Debug, [debug], [d]
+- `trace`: TRACE, Trace, Perf, [verbose], [v]
+
+**Timestamp formats:** ISO datetime (`2026-04-13T10:00:00`), time only (`10:00:00`), bracketed (`[09:22:25.450]`).
+
+**HTTP status:** Extracted from lines with HTTP-related context (e.g., `HTTP/1.1 200 OK`, `status: 500`).
+
+**Exceptions:** Matches exception class names, stack traces, `Error:` prefix, `stack:` property.
+
+</details>
 
 <details>
 <summary><strong>Algorithm Notes</strong></summary>
@@ -321,3 +358,9 @@ Tools are enabled by default. Only tools explicitly set to `"false"` are skipped
 ## Requirements
 
 - Node.js >= 20
+
+## Server Instructions
+
+The server provides **instructions** to MCP clients during initialization. These instructions are read from `system.instructions.md` at startup and may be included in the client's system prompt.
+
+The default instructions document the structured log filtering patterns supported by `readLogFile`. You can customize these instructions by editing `system.instructions.md` after installing the package locally.

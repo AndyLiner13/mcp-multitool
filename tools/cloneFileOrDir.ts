@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { access, cp } from "node:fs/promises";
+import { access, cp, mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 
@@ -35,14 +35,13 @@ export function register(server: McpServer): void {
     async (input) => {
       try {
         const sources = Array.isArray(input.from) ? input.from : [input.from];
+        const destDir = resolve(process.cwd(), input.to);
+        await mkdir(destDir, { recursive: true });
         const results: { source: string; destination: string }[] = [];
 
         for (const src of sources) {
           const srcPath = resolve(process.cwd(), src);
-          const destPath = join(
-            resolve(process.cwd(), input.to),
-            basename(src),
-          );
+          const destPath = join(destDir, basename(src));
 
           if (!input.overwrite && (await exists(destPath))) {
             throw new Error(

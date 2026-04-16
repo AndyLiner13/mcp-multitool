@@ -17,3 +17,7 @@ A tool that allows the agent to generate JSX that will render in the MCP tool's 
 ## calculator
 
 An advanced calculator tool that allows the agent to do advanced calculations using a variety of supported mathematical formulas and equation visualization features via an MCP app.
+
+## listDirectories
+
+A tool that lets you list directories with variable depth, a gitignore bool, etc.

@@ -11,6 +11,6 @@
     "declaration": true,
     "types": ["node"]
   },
-  "include": ["index.ts", "tools/**/*.ts"],
+  "include": ["index.ts", "tools/**/*.ts", "packages/log-grammar/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

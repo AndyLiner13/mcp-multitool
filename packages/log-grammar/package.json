@@ -1,0 +1,26 @@
+{
+  "name": "@mcp-multitool/log-grammar",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "TextMate grammar for log files, extracted from VS Code",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/vscode.git",
+    "directory": "extensions/log"
+  },
+  "upstream": {
+    "source": "https://github.com/emilast/vscode-logfile-highlighter",
+    "vscodeCommit": "06f94d567a72d67daa15eb4a4013e525ff072095"
+  },
+  "main": "log.tmLanguage.json",
+  "files": [
+    "log.tmLanguage.json"
+  ],
+  "keywords": [
+    "textmate",
+    "grammar",
+    "log",
+    "syntax"
+  ]
+}
