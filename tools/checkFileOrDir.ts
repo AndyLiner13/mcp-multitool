@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { lstat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const schema = z.object({
   path: z.string().min(1).describe("Path to the file or folder to check."),
@@ -12,7 +13,7 @@ export function register(server: McpServer): void {
     "checkFileOrDir",
     {
       description:
-        "Check if a file or directory exists and return its metadata (type, size, timestamps, permissions). Returns an error if the path does not exist.",
+        "Check if a file or directory exists and return its metadata (type, size, timestamps, permissions). Returns an error if the path does not exist. Relative paths are resolved against the first MCP root (typically the workspace folder).",
       inputSchema: schema,
       annotations: {
         readOnlyHint: true,
@@ -21,7 +22,8 @@ export function register(server: McpServer): void {
     },
     async (input) => {
       try {
-        const fullPath = resolve(process.cwd(), input.path);
+        const cwd = await resolveCwd(server);
+        const fullPath = resolve(cwd, input.path);
         const stats = await lstat(fullPath);
 
         const type =
@@ -53,4 +55,17 @@ export function register(server: McpServer): void {
       }
     },
   );
+}
+
+async function resolveCwd(server: McpServer): Promise<string> {
+  try {
+    const { roots } = await server.server.listRoots();
+    const first = roots[0];
+    if (first?.uri?.startsWith("file://")) {
+      return fileURLToPath(first.uri);
+    }
+  } catch {
+    // NOTE: Client doesn't support roots capability; fall back to process.cwd().
+  }
+  return process.cwd();
 }

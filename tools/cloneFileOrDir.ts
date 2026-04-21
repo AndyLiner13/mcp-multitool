@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { access, cp, mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 const schema = z.object({
@@ -25,7 +26,7 @@ export function register(server: McpServer): void {
     "cloneFileOrDir",
     {
       description:
-        "Copy one or more files or directories to a destination directory.",
+        "Copy one or more files or directories to a destination directory. Relative paths are resolved against the first MCP root (typically the workspace folder).",
       inputSchema: schema,
       annotations: {
         destructiveHint: true,
@@ -34,13 +35,14 @@ export function register(server: McpServer): void {
     },
     async (input) => {
       try {
+        const cwd = await resolveCwd(server);
         const sources = Array.isArray(input.from) ? input.from : [input.from];
-        const destDir = resolve(process.cwd(), input.to);
+        const destDir = resolve(cwd, input.to);
         await mkdir(destDir, { recursive: true });
         const results: { source: string; destination: string }[] = [];
 
         for (const src of sources) {
-          const srcPath = resolve(process.cwd(), src);
+          const srcPath = resolve(cwd, src);
           const destPath = join(destDir, basename(src));
 
           if (!input.overwrite && (await exists(destPath))) {
@@ -67,4 +69,17 @@ export function register(server: McpServer): void {
       }
     },
   );
+}
+
+async function resolveCwd(server: McpServer): Promise<string> {
+  try {
+    const { roots } = await server.server.listRoots();
+    const first = roots[0];
+    if (first?.uri?.startsWith("file://")) {
+      return fileURLToPath(first.uri);
+    }
+  } catch {
+    // NOTE: Client doesn't support roots capability; fall back to process.cwd().
+  }
+  return process.cwd();
 }

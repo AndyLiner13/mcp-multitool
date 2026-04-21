@@ -52,6 +52,79 @@ The `readLogFile` tool was built specifically to solve these problems. It:
 
 ---
 
+## Content Search
+
+**NEVER use CLI commands for content search.** Use `ripgrepSearch` for ALL searches across file contents.
+
+| Operation                   | CLI (NEVER use)                        | MCP Tool (ALWAYS use)                           |
+| --------------------------- | -------------------------------------- | ----------------------------------------------- |
+| Search for text/regex       | `grep`, `egrep`, `fgrep`, `rg`         | `ripgrepSearch`                                 |
+| Search on Windows           | `findstr`, `Select-String`, `sls`      | `ripgrepSearch`                                 |
+| Search PowerShell pipelines | `... \| Select-String`, `... \| where` | `ripgrepSearch`                                 |
+| Find files matching pattern | `find`, `Get-ChildItem -Recurse`       | `ripgrepSearch  args=["--files", "-g", "GLOB"]` |
+
+**Why:** The `ripgrepSearch` tool ships a bundled ripgrep binary and provides:
+
+- **Cross-platform consistency** — Same behavior on Windows, macOS, Linux. CLI alternatives are platform-specific (`findstr` is Windows-only, `grep` may not be installed, `Select-String` is PowerShell-only).
+- **No PATH dependency** — The binary is bundled via `@vscode/ripgrep`. Never fails with "command not found."
+- **No shell-quoting hell** — Arguments are passed as an array directly to the binary. Regex with `$`, `"`, `\`, etc. works identically on every platform without escape gymnastics.
+- **Predictable exit codes** — `0` = matches, `1` = no matches (not an error), `2+` = real error surfaced as `isError: true` with stderr.
+- **Verbatim native output** — Returns ripgrep's own output format. Pass `--json` for structured JSON Lines, `-c` for counts, `-l` for filenames-only, etc.
+- **Workspace-aware** — Resolves working directory via the MCP roots protocol (typically the workspace root).
+
+---
+
+## ripgrepSearch — Native ripgrep CLI Pass-Through
+
+The `ripgrepSearch` tool is a thin adapter — it spawns the bundled `rg` binary with whatever arguments you provide and returns its output verbatim. You use it exactly as you would use `rg` on the command line, except arguments are passed as an array of strings instead of being parsed by a shell.
+
+### Discovering flags
+
+```
+ripgrepSearch  args=["--help"]
+ripgrepSearch  args=["--type-list"]
+```
+
+### Common patterns
+
+```
+# Basic case-insensitive search across the workspace
+ripgrepSearch  args=["-i", "TODO", "."]
+
+# Search only TypeScript files, ignore .gitignore
+ripgrepSearch  args=["-i", "--no-ignore", "-g", "*.ts", "console.log", "src/"]
+
+# Show 3 lines of context before and after each match
+ripgrepSearch  args=["-A", "3", "-B", "3", "function\\s+\\w+", "tools/"]
+
+# Multiline regex (allow pattern to span lines)
+ripgrepSearch  args=["--json", "-U", "export\\s+function", "."]
+
+# Count matches per file
+ripgrepSearch  args=["-c", "import", "src/"]
+
+# List files matching a pattern (no content)
+ripgrepSearch  args=["-l", "TODO", "."]
+
+# Find files by name only (no content matching)
+ripgrepSearch  args=["--files", "-g", "*.test.ts"]
+
+# Search hidden files too
+ripgrepSearch  args=["--hidden", "API_KEY", "."]
+```
+
+### Exit code behavior
+
+- `exitCode === 0` — Matches found. Stdout returned verbatim.
+- `exitCode === 1` — No matches found. Stdout (empty) returned verbatim. **Not an error.**
+- `exitCode >= 2` — Real error (invalid regex, missing path, etc.). Stderr returned verbatim with `isError: true`.
+
+### Timeout
+
+By default `ripgrepSearch` has **no timeout** — it will run until ripgrep finishes. The deployment may set the `ripgrepSearchTimeoutMs` env var to bound execution time. If a call is killed by the timeout, the response will be `isError: true` with a message identifying the env var; rerun with a more selective query (narrower path, more specific pattern, `--max-count`, `-l`, etc.) rather than asking for the timeout to be raised.
+
+---
+
 ## readLogFile — Structured Log Filtering
 
 The readLogFile tool supports structured filtering via these parameters:

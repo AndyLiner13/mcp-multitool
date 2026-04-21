@@ -1,5 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { rm } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 const schema = z.object({
@@ -15,7 +17,8 @@ export function register(server: McpServer): void {
   server.registerTool(
     "deleteFileOrDir",
     {
-      description: "Delete one or more files or directories.",
+      description:
+        "Delete one or more files or directories. Relative paths are resolved against the first MCP root (typically the workspace folder).",
       inputSchema: schema,
       annotations: {
         destructiveHint: true,
@@ -24,12 +27,16 @@ export function register(server: McpServer): void {
     },
     async (input) => {
       try {
+        const cwd = await resolveCwd(server);
         const paths = Array.isArray(input.paths) ? input.paths : [input.paths];
+        const resolved = paths.map((p) => resolve(cwd, p));
         await Promise.all(
-          paths.map((p) => rm(p, { recursive: input.recursive })),
+          resolved.map((p) => rm(p, { recursive: input.recursive })),
         );
         return {
-          content: [{ type: "text", text: `Deleted ${paths.length} path(s).` }],
+          content: [
+            { type: "text", text: `Deleted ${resolved.length} path(s).` },
+          ],
         };
       } catch (err: unknown) {
         return {
@@ -39,4 +46,17 @@ export function register(server: McpServer): void {
       }
     },
   );
+}
+
+async function resolveCwd(server: McpServer): Promise<string> {
+  try {
+    const { roots } = await server.server.listRoots();
+    const first = roots[0];
+    if (first?.uri?.startsWith("file://")) {
+      return fileURLToPath(first.uri);
+    }
+  } catch {
+    // NOTE: Client doesn't support roots capability; fall back to process.cwd().
+  }
+  return process.cwd();
 }

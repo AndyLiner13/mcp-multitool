@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
   extractMetadata,
@@ -316,13 +317,14 @@ export function register(server: McpServer): void {
     "readLogFile",
     {
       description:
-        "Compress a log file using the Drain algorithm for semantic pattern extraction. Groups similar lines into templates. Stateless — each call processes the file fresh. Template IDs are content-hashed so the same pattern always has the same ID.",
+        "Compress a log file using the Drain algorithm for semantic pattern extraction. Groups similar lines into templates. Stateless — each call processes the file fresh. Template IDs are content-hashed so the same pattern always has the same ID. Relative paths are resolved against the first MCP root (typically the workspace folder).",
       inputSchema: schema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (input) => {
       try {
-        return ok(await Promise.race([processLog(input), timeout()]));
+        const cwd = await resolveCwd(server);
+        return ok(await Promise.race([processLog(input, cwd), timeout()]));
       } catch (e) {
         return err(String(e));
       }
@@ -337,8 +339,11 @@ interface TemplateInfo {
   lineIndices: number[];
 }
 
-async function processLog(input: z.infer<typeof schema>): Promise<string> {
-  const path = resolve(process.cwd(), input.path);
+async function processLog(
+  input: z.infer<typeof schema>,
+  cwd: string,
+): Promise<string> {
+  const path = resolve(cwd, input.path);
 
   if (input.head && input.tail) {
     return "Cannot use both head and tail.";
@@ -466,6 +471,19 @@ function timeout(): Promise<never> {
   return new Promise((_, rej) =>
     setTimeout(() => rej(new Error(`Timeout: ${timeoutMs}ms`)), timeoutMs),
   );
+}
+
+async function resolveCwd(server: McpServer): Promise<string> {
+  try {
+    const { roots } = await server.server.listRoots();
+    const first = roots[0];
+    if (first?.uri?.startsWith("file://")) {
+      return fileURLToPath(first.uri);
+    }
+  } catch {
+    // NOTE: Client doesn't support roots capability; fall back to process.cwd().
+  }
+  return process.cwd();
 }
 
 // --- Structured Filter Builder ---

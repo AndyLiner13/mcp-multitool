@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { access, mkdir, rename } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 const schema = z.object({
@@ -25,7 +26,7 @@ export function register(server: McpServer): void {
     "moveFileOrDir",
     {
       description:
-        "Move one or more files or directories to a destination directory.",
+        "Move one or more files or directories to a destination directory. Relative paths are resolved against the first MCP root (typically the workspace folder).",
       inputSchema: schema,
       annotations: {
         destructiveHint: true,
@@ -34,16 +35,19 @@ export function register(server: McpServer): void {
     },
     async (input) => {
       try {
+        const cwd = await resolveCwd(server);
         const sources = Array.isArray(input.from) ? input.from : [input.from];
-        await mkdir(input.to, { recursive: true });
+        const destDir = resolve(cwd, input.to);
+        await mkdir(destDir, { recursive: true });
         for (const src of sources) {
-          const dest = join(input.to, basename(src));
+          const srcPath = resolve(cwd, src);
+          const dest = join(destDir, basename(src));
           if (!input.overwrite && (await exists(dest))) {
             throw new Error(
               `Destination exists: ${dest}. Set overwrite=true to replace.`,
             );
           }
-          await rename(src, dest);
+          await rename(srcPath, dest);
         }
         return {
           content: [{ type: "text", text: `Moved ${sources.length} path(s).` }],
@@ -56,4 +60,17 @@ export function register(server: McpServer): void {
       }
     },
   );
+}
+
+async function resolveCwd(server: McpServer): Promise<string> {
+  try {
+    const { roots } = await server.server.listRoots();
+    const first = roots[0];
+    if (first?.uri?.startsWith("file://")) {
+      return fileURLToPath(first.uri);
+    }
+  } catch {
+    // NOTE: Client doesn't support roots capability; fall back to process.cwd().
+  }
+  return process.cwd();
 }

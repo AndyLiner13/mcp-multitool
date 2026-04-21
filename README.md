@@ -8,16 +8,16 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server with **
 
 ## Tools
 
-| Tool              | Description                                             |
-| ----------------- | ------------------------------------------------------- |
-| `astGrepSearch`   | Search code using AST patterns                          |
-| `checkFileOrDir`  | Check if a file or directory exists and return metadata |
-| `cloneFileOrDir`  | Copy one or more files or directories to a destination  |
-| `deleteFileOrDir` | Delete one or more files or directories                 |
-| `moveFileOrDir`   | Move one or more files or directories to a new location |
-| `readLogFile`     | Read and compress logs with 60-90% token reduction      |
-| `renameFileOrDir` | Rename a single file or directory                       |
-| `wait`            | Pause execution for rate limits or timing               |
+| Tool              | Description                                                   |
+| ----------------- | ------------------------------------------------------------- |
+| `checkFileOrDir`  | Check if a file or directory exists and return metadata       |
+| `cloneFileOrDir`  | Copy one or more files or directories to a destination        |
+| `deleteFileOrDir` | Delete one or more files or directories                       |
+| `moveFileOrDir`   | Move one or more files or directories to a new location       |
+| `readLogFile`     | Read and compress logs with 60-90% token reduction            |
+| `renameFileOrDir` | Rename a single file or directory                             |
+| `ripgrepSearch`   | MCP adapter for ripgrep — fast text/regex search across files |
+| `wait`            | Pause execution for rate limits or timing                     |
 
 ## Why
 
@@ -61,31 +61,15 @@ npx mcp-multitool
 
 **Cursor, Windsurf, Continue** — follow each client's MCP server documentation using the same `npx mcp-multitool` command.
 
+## Working Directory
+
+Tools that accept file paths (`checkFileOrDir`, `cloneFileOrDir`, `deleteFileOrDir`, `moveFileOrDir`, `readLogFile`, `renameFileOrDir`, `ripgrepSearch`) resolve **relative paths against the first MCP root provided by the client** — typically the workspace folder in VS Code, or the directory the user opened in their MCP client. Absolute paths are used unchanged.
+
+If the client doesn't support the MCP roots protocol, tools fall back to `process.cwd()` (the directory the server process was launched from).
+
+This means a relative path like `src/index.ts` resolves the same way it would if you typed it into your editor's Quick Open — no need to construct absolute paths or guess the server's working directory.
+
 ## Tool Reference
-
-### `astGrepSearch`
-
-Search code using AST patterns. Matches code structure, not text. Use `$VAR` for single-node wildcards (e.g., `console.log($ARG)`), `$$$VAR` for multiple nodes. More precise than regex for code search.
-
-| Parameter | Type                 | Required | Description                                                                      |
-| --------- | -------------------- | -------- | -------------------------------------------------------------------------------- |
-| `pattern` | `string`             | ✅       | AST pattern to match. Use `$VAR` for metavariables, `$$$VAR` for multiple nodes. |
-| `paths`   | `string \| string[]` | ✅       | File or directory path(s) to search. Directories are searched recursively.       |
-| `lang`    | `string`             | ✅       | Language to parse. Built-in: `javascript`, `typescript`, `tsx`, `html`, `css`.   |
-
-**Response:** JSON object with `results` array (each with `file`, `range`, `text`) and `errors` array.
-
-**Pattern Validation:** Patterns are validated before search. Invalid patterns (e.g., `class X` without a body, `function foo` without parentheses) return an error explaining the issue. Patterns must be syntactically complete code fragments.
-
-**Examples:**
-
-```
-astGrepSearch  pattern="console.log($ARG)"  paths="src"  lang="typescript"
-astGrepSearch  pattern="function $NAME($$$PARAMS) { $$$BODY }"  paths=["lib", "src"]  lang="javascript"
-astGrepSearch  pattern="<div $$$ATTRS>$$$CHILDREN</div>"  paths="components"  lang="tsx"
-```
-
----
 
 ### `checkFileOrDir`
 
@@ -282,6 +266,28 @@ renameFileOrDir  oldPath="/app/src"  newPath="/app/source"
 
 ---
 
+### `ripgrepSearch`
+
+MCP adapter for [ripgrep](https://github.com/BurntSushi/ripgrep) (the same engine VS Code's find-in-files uses). Spawns the bundled `rg` binary with the provided args and returns its output. Returns `rg`'s stdout verbatim on success (exit code 0 = matches found, exit code 1 = no matches found). Returns `rg`'s stderr with `isError=true` on real errors (exit code 2 or higher). Working directory is the first MCP root provided by the client (typically the workspace root); falls back to `process.cwd()` if no roots are available.
+
+| Parameter | Type       | Required | Description                                                                                                                                                                                                  |
+| --------- | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `args`    | `string[]` | ✅       | Arguments to pass to ripgrep, in the same order you would type them after `rg` on the command line. For the complete flag reference, call this tool with `args: ["--help"]` to get ripgrep's full help text. |
+
+**Response:** `rg`'s stdout verbatim (or stderr verbatim with `isError=true` if `rg` exits with code 2 or higher).
+
+**Examples:**
+
+```
+ripgrepSearch  args=["TODO", "."]
+ripgrepSearch  args=["-i", "--no-ignore", "-g", "*.ts", "console.log", "src/"]
+ripgrepSearch  args=["-A", "3", "-B", "3", "function\\s+\\w+", "tools/"]
+ripgrepSearch  args=["--json", "-U", "export\\s+function", "."]
+ripgrepSearch  args=["--help"]
+```
+
+---
+
 ### `wait`
 
 Wait for a specified duration before continuing.
@@ -303,19 +309,20 @@ wait  durationSeconds=1  reason="animation to complete"
 
 ## Environment Variables
 
-| Variable                  | Default | Description                                                                                                                     |
-| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `waitMaxDurationSeconds`  | `300`   | Override the maximum allowed `durationSeconds`. Must be a positive number. Server refuses to start if invalid.                  |
-| `readLogFileTimeoutMs`    | `5000`  | Override the timeout for `readLogFile` processing in milliseconds. Server refuses to start if invalid.                          |
-| `readLogFileRoutingDepth` | `2`     | Tree routing depth (1-5). Higher values isolate more but increase memory. Tune if you see all-wildcard templates or OOM errors. |
-| `astGrepSearch`           | _(on)_  | Set to `"false"` to disable the `astGrepSearch` tool at startup.                                                                |
-| `checkFileOrDir`          | _(on)_  | Set to `"false"` to disable the `checkFileOrDir` tool at startup.                                                               |
-| `cloneFileOrDir`          | _(on)_  | Set to `"false"` to disable the `cloneFileOrDir` tool at startup.                                                               |
-| `deleteFileOrDir`         | _(on)_  | Set to `"false"` to disable the `deleteFileOrDir` tool at startup.                                                              |
-| `moveFileOrDir`           | _(on)_  | Set to `"false"` to disable the `moveFileOrDir` tool at startup.                                                                |
-| `readLogFile`             | _(on)_  | Set to `"false"` to disable the `readLogFile` tool at startup.                                                                  |
-| `renameFileOrDir`         | _(on)_  | Set to `"false"` to disable the `renameFileOrDir` tool at startup.                                                              |
-| `wait`                    | _(on)_  | Set to `"false"` to disable the `wait` tool at startup.                                                                         |
+| Variable                  | Default | Description                                                                                                                                                                    |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `waitMaxDurationSeconds`  | `300`   | Override the maximum allowed `durationSeconds`. Must be a positive number. Server refuses to start if invalid.                                                                 |
+| `readLogFileTimeoutMs`    | `5000`  | Override the timeout for `readLogFile` processing in milliseconds. Server refuses to start if invalid.                                                                         |
+| `readLogFileRoutingDepth` | `2`     | Tree routing depth (1-5). Higher values isolate more but increase memory. Tune if you see all-wildcard templates or OOM errors.                                                |
+| `ripgrepSearchTimeoutMs`  | `0`     | Maximum time in milliseconds before a `ripgrepSearch` invocation is killed. `0` (default) means unlimited. Must be a non-negative integer. Server refuses to start if invalid. |
+| `checkFileOrDir`          | _(on)_  | Set to `"false"` to disable the `checkFileOrDir` tool at startup.                                                                                                              |
+| `cloneFileOrDir`          | _(on)_  | Set to `"false"` to disable the `cloneFileOrDir` tool at startup.                                                                                                              |
+| `deleteFileOrDir`         | _(on)_  | Set to `"false"` to disable the `deleteFileOrDir` tool at startup.                                                                                                             |
+| `moveFileOrDir`           | _(on)_  | Set to `"false"` to disable the `moveFileOrDir` tool at startup.                                                                                                               |
+| `readLogFile`             | _(on)_  | Set to `"false"` to disable the `readLogFile` tool at startup.                                                                                                                 |
+| `renameFileOrDir`         | _(on)_  | Set to `"false"` to disable the `renameFileOrDir` tool at startup.                                                                                                             |
+| `ripgrepSearch`           | _(on)_  | Set to `"false"` to disable the `ripgrepSearch` tool at startup.                                                                                                               |
+| `wait`                    | _(on)_  | Set to `"false"` to disable the `wait` tool at startup.                                                                                                                        |
 
 ### Disabling Individual Tools
 
