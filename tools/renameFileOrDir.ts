@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod/v4";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { rename, stat } from "node:fs/promises";
 import { dirname, basename, resolve } from "node:path";

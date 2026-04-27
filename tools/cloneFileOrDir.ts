@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { access, cp, mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { z } from "zod";
+import * as z from "zod/v4";
 
 const schema = z.object({
   from: z

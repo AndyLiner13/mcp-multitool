@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
+import * as z from "zod/v4";
 
 const DEFAULT_MAX_SECONDS = 300;
 const maxSeconds = parseMaxDuration();

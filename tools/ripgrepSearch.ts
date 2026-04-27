@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { rgPath } from "@vscode/ripgrep";
-import { z } from "zod";
+import * as z from "zod/v4";
 
 const timeoutMs = parseTimeoutMs();
 
