@@ -1,7 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { rgPath } from "@vscode/ripgrep";
 import * as z from "zod/v4";
 
 const timeoutMs = parseTimeoutMs();
@@ -21,11 +20,12 @@ function parseTimeoutMs(): number {
 
 const schema = z.object({
   args: z
-    .array(z.string())
+    .string()
     .describe(
-      "Arguments to pass to ripgrep, in the same order you would type them after `rg` on the command line. " +
-        "Example: ['-i', '--no-ignore', '-g', '*.ts', 'TODO', 'src/']. " +
-        "For the complete flag reference, call this tool with args: ['--help'] to get ripgrep's full help text.",
+      "The ripgrep command line exactly as you would type it in a terminal, starting with 'rg'. " +
+        "Example: 'rg -i TODO .' or 'rg -A 3 myPattern src/'. " +
+        "The 'rg' binary is resolved automatically — just write the command as you normally would. " +
+        "For all available flags: 'rg --help'.",
     ),
 });
 
@@ -34,11 +34,11 @@ export function register(server: McpServer): void {
     "ripgrepSearch",
     {
       description:
-        "MCP adapter for ripgrep (the same engine VS Code's find-in-files uses). " +
-        "Spawns the bundled rg binary with the provided args and returns its output. " +
-        "On success (exit code 0 = matches found, exit code 1 = no matches found), returns rg's stdout verbatim. " +
-        "On error (exit code 2 or higher), returns rg's stderr verbatim with isError=true. " +
-        "Working directory is the first MCP root provided by the client (typically the workspace root); falls back to process.cwd() if no roots are available.",
+        "Run a ripgrep search by passing the full command as a string, exactly as you would type it in a terminal. " +
+        "The 'rg' binary is resolved to the bundled ripgrep automatically. " +
+        "Returns rg's stdout verbatim on success (exit code 0 = matches found, exit code 1 = no matches). " +
+        "Returns rg's stderr with isError=true on error (exit code 2+). " +
+        "Working directory is the first MCP root (typically the workspace root); falls back to process.cwd() if no roots are available.",
       inputSchema: schema,
       annotations: {
         readOnlyHint: true,
@@ -49,6 +49,7 @@ export function register(server: McpServer): void {
       try {
         const cwd = await resolveCwd(server);
         const { stdout, stderr, exitCode } = await runRg(input.args, cwd);
+        // NOTE: exitCode 0 = matches found, 1 = no matches (not an error), 2+ = real error
         if (exitCode === 0 || exitCode === 1) {
           return { content: [{ type: "text", text: stdout }] };
         }
@@ -98,11 +99,11 @@ async function resolveCwd(server: McpServer): Promise<string> {
 }
 
 function runRg(
-  args: string[],
+  args: string,
   cwd: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(rgPath, args, { cwd });
+    const child = spawn(args, [], { cwd, shell: true });
     let stdout = "";
     let stderr = "";
     let timedOut = false;

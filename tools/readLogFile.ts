@@ -5,9 +5,9 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as z from "zod/v4";
 import {
-  extractMetadata,
-  matchesFilter,
-  type LogLevel,
+    extractMetadata,
+    matchesFilter,
+    type LogLevel,
 } from "../packages/log-grammar/extractor.js";
 
 const timeoutMs = (() => {
@@ -416,7 +416,7 @@ async function processLog(
     return formatDrillDown(template, lines);
   }
 
-  return formatOverview(templateMap, lines.length, inputLength);
+  return formatOverview(templateMap, lines, inputLength);
 }
 
 function buildTemplateMap(templates: Template[]): Map<string, TemplateInfo> {
@@ -437,22 +437,26 @@ function buildTemplateMap(templates: Template[]): Map<string, TemplateInfo> {
 
 function formatOverview(
   templateMap: Map<string, TemplateInfo>,
-  lineCount: number,
+  lines: string[],
   inputLength: number,
 ): string {
   const sorted = [...templateMap.values()].sort((a, b) => b.count - a.count);
-  const lineReduction = Math.round((1 - templateMap.size / lineCount) * 100);
+  const lineReduction = Math.round((1 - templateMap.size / lines.length) * 100);
 
-  const body = sorted
+  const compressedBody = sorted
     .map((t) => `${t.id} [${t.count}x] ${t.pattern}`)
     .join("\n");
-  const outputLength = body.length;
-  const charReduction = Math.round((1 - outputLength / inputLength) * 100);
+  const compressedLength = compressedBody.length;
+  const charReduction = Math.round((1 - compressedLength / inputLength) * 100);
 
   const header =
     `=== Log Compression ===\n` +
-    `${lineCount} lines → ${templateMap.size} templates (${lineReduction}% reduction)\n` +
-    `${inputLength.toLocaleString()} chars → ${outputLength.toLocaleString()} chars (${charReduction}% reduction)\n`;
+    `${lines.length} lines → ${templateMap.size} templates (${lineReduction}% reduction)\n` +
+    `${inputLength.toLocaleString()} chars → ${compressedLength.toLocaleString()} chars (${charReduction}% reduction)\n`;
+
+  // Tokenized patterns can bloat JSON/structured content — fall back to raw lines
+  // when the compressed form would be larger than the original.
+  const body = charReduction < 0 ? lines.join("\n") : compressedBody;
 
   return `${header}\n${body}`;
 }
